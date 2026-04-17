@@ -76,3 +76,6 @@ ai-models.json
 # local backups
 *.bak
 .gstack/
+
+# Local test fixtures (copyrighted material)
+test-data/

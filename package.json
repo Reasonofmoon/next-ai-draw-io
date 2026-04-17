@@ -64,6 +64,7 @@
         "@radix-ui/react-switch": "^1.2.6",
         "@radix-ui/react-tooltip": "^1.1.8",
         "@radix-ui/react-use-controllable-state": "^1.2.2",
+        "@rhwp/core": "^0.7.2",
         "@xmldom/xmldom": "^0.9.8",
         "ai": "^6.0.1",
         "base-64": "^1.0.0",
