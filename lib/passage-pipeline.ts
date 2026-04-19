@@ -147,8 +147,9 @@ export function buildPassagePrompt(passage: DetectedPassage): string {
 }
 
 /**
- * Call /api/chat with a single-turn user message and extract the
- * display_diagram tool-input XML from the SSE stream.
+ * Call /api/generate-passage-diagram (non-streaming JSON endpoint) and
+ * return the mxCell XML fragment. Preferred over /api/chat for batch work:
+ * no SSE parsing, no tool-call protocol parsing client-side.
  */
 export async function generateDiagramXml(
     passage: DetectedPassage,
@@ -156,77 +157,43 @@ export async function generateDiagramXml(
 ): Promise<string> {
     const userPrompt = buildPassagePrompt(passage)
 
-    const res = await fetch("/api/chat", {
+    const res = await fetch("/api/generate-passage-diagram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal,
         body: JSON.stringify({
-            messages: [
-                {
-                    id: `passage-${passage.questionNumber}-${Date.now()}`,
-                    role: "user",
-                    parts: [{ type: "text", text: userPrompt }],
-                },
-            ],
-            xml: "",
-            previousXml: "",
-            sessionId: "",
-            customSystemMessage: "",
+            passage: {
+                englishText: passage.englishPassage,
+                questionType: passage.questionType,
+                koreanInstruction: passage.koreanInstruction || undefined,
+                questionNumber: passage.questionNumber,
+            },
+            userPrompt,
         }),
     })
 
     if (!res.ok) {
         const body = await res.text().catch(() => "")
-        throw new Error(`/api/chat ${res.status}: ${body.slice(0, 200)}`)
-    }
-    if (!res.body) throw new Error("/api/chat: empty body")
-
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-    let collectedXml: string | null = null
-    let deltaXml = ""
-
-    while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-
-        // SSE events are separated by blank lines ("\n\n")
-        const events = buffer.split("\n\n")
-        buffer = events.pop() ?? ""
-
-        for (const evt of events) {
-            for (const line of evt.split("\n")) {
-                if (!line.startsWith("data:")) continue
-                const jsonStr = line.slice(5).trim()
-                if (!jsonStr || jsonStr === "[DONE]") continue
-                try {
-                    const msg = JSON.parse(jsonStr)
-                    if (
-                        msg.type === "tool-input-available" &&
-                        msg.toolName === "display_diagram" &&
-                        msg.input?.xml
-                    ) {
-                        collectedXml = msg.input.xml as string
-                    } else if (
-                        msg.type === "tool-input-delta" &&
-                        typeof msg.inputTextDelta === "string"
-                    ) {
-                        deltaXml += msg.inputTextDelta
-                    }
-                } catch {
-                    // ignore malformed event
-                }
-            }
-        }
+        throw new Error(
+            `/api/generate-passage-diagram ${res.status}: ${body.slice(0, 300)}`,
+        )
     }
 
-    const xml = collectedXml ?? deltaXml
-    if (!xml || xml.trim().length === 0) {
-        throw new Error("No diagram XML returned from /api/chat")
+    const data = (await res.json()) as {
+        xml?: string
+        error?: string
+        rawText?: string
+        warning?: string
     }
-    return xml
+    if (data.error || !data.xml) {
+        throw new Error(
+            data.error ?? "No XML in response from generate-passage-diagram",
+        )
+    }
+    if (data.warning) {
+        console.warn("[passage-pipeline]", data.warning)
+    }
+    return data.xml
 }
 
 /**

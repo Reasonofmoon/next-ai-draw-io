@@ -230,6 +230,74 @@ function detectQuestionType(koreanInstruction: string): string {
 }
 
 /**
+ * Hybrid detection: try regex first, fall back to AI if regex result is weak.
+ * Returns detected passages + which method produced them (for UI feedback).
+ */
+export async function detectPassagesHybrid(
+    paragraphs: HwpParagraph[],
+    options: {
+        signal?: AbortSignal
+        onStageChange?: (stage: "regex" | "ai" | "done") => void
+    } = {},
+): Promise<{
+    passages: DetectedPassage[]
+    method: "regex" | "ai" | "regex+ai"
+    regexCount: number
+    aiCount: number
+}> {
+    options.onStageChange?.("regex")
+    const regexResult = detectPassagesFromParagraphs(paragraphs)
+
+    const { detectPassagesViaAI, isRegexResultGoodEnough } = await import(
+        "@/lib/passage-detection-ai"
+    )
+
+    if (isRegexResultGoodEnough(regexResult, paragraphs)) {
+        options.onStageChange?.("done")
+        return {
+            passages: regexResult,
+            method: "regex",
+            regexCount: regexResult.length,
+            aiCount: 0,
+        }
+    }
+
+    options.onStageChange?.("ai")
+    try {
+        const aiResult = await detectPassagesViaAI(paragraphs, options.signal)
+        options.onStageChange?.("done")
+
+        // If AI found more than regex, trust AI fully.
+        // If regex found some but AI more, use AI (it's more comprehensive).
+        // If AI returned 0 but regex had some, keep regex.
+        if (aiResult.length === 0 && regexResult.length > 0) {
+            return {
+                passages: regexResult,
+                method: "regex",
+                regexCount: regexResult.length,
+                aiCount: 0,
+            }
+        }
+        return {
+            passages: aiResult,
+            method: regexResult.length > 0 ? "regex+ai" : "ai",
+            regexCount: regexResult.length,
+            aiCount: aiResult.length,
+        }
+    } catch (err) {
+        console.error("[hwp-utils] AI detection fallback failed:", err)
+        options.onStageChange?.("done")
+        // AI failed — fall back to whatever regex got
+        return {
+            passages: regexResult,
+            method: "regex",
+            regexCount: regexResult.length,
+            aiCount: 0,
+        }
+    }
+}
+
+/**
  * Diagnostic: scan paragraphs and report every question-number candidate found.
  * Useful when detectPassagesFromParagraphs returns 0 — helps figure out why.
  */

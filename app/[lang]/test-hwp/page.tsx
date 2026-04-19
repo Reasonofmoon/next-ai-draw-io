@@ -101,6 +101,124 @@ export default function TestHwpPage() {
         }
     }
 
+    const handleRunSampleBatch = async () => {
+        setPipelineRunning(true)
+        setPassageResults(new Map())
+        log(
+            "=== Starting sample batch (visual verification, no HWP insertion) ===",
+        )
+
+        try {
+            const {
+                generateDiagramXml,
+                DrawioPngRenderer,
+                buildDrawioShareUrl,
+            } = await import("@/lib/passage-pipeline")
+            const { composeDiagramWithCaption } = await import(
+                "@/lib/diagram-captioner"
+            )
+            const { SAMPLE_PASSAGES } = await import("@/lib/passage-samples")
+
+            const renderer = new DrawioPngRenderer()
+            await renderer.init()
+            log("draw.io renderer ready")
+
+            let failures = 0
+            setPipelineProgress({
+                current: 0,
+                total: SAMPLE_PASSAGES.length,
+                stage: "starting",
+                failures: 0,
+            })
+
+            for (let i = 0; i < SAMPLE_PASSAGES.length; i++) {
+                const sample = SAMPLE_PASSAGES[i]
+                const p = sample.passage
+                try {
+                    log(
+                        `[${i + 1}/${SAMPLE_PASSAGES.length}] ${sample.label} — AI call`,
+                    )
+                    setPipelineProgress({
+                        current: i,
+                        total: SAMPLE_PASSAGES.length,
+                        stage: `AI → ${sample.label}`,
+                        failures,
+                    })
+                    const xml = await generateDiagramXml(p)
+
+                    log(`[${i + 1}/${SAMPLE_PASSAGES.length}] rendering PNG...`)
+                    setPipelineProgress({
+                        current: i,
+                        total: SAMPLE_PASSAGES.length,
+                        stage: `PNG → ${sample.label}`,
+                        failures,
+                    })
+                    const rawPng = await renderer.render(xml, 2)
+                    const pngBytes = await composeDiagramWithCaption(rawPng, {
+                        questionNumber: p.questionNumber,
+                        questionType: p.questionType,
+                    })
+
+                    const blob = new Blob([pngBytes.buffer as ArrayBuffer], {
+                        type: "image/png",
+                    })
+                    const reader = new FileReader()
+                    await new Promise<void>((resolve) => {
+                        reader.onload = () => {
+                            const dataUrl = reader.result as string
+                            setPassageResults((prev) => {
+                                const next = new Map(prev)
+                                next.set(p.questionNumber, {
+                                    xml,
+                                    pngDataUrl: dataUrl,
+                                    shareUrl: buildDrawioShareUrl(xml),
+                                })
+                                return next
+                            })
+                            resolve()
+                        }
+                        reader.readAsDataURL(blob)
+                    })
+                    log(
+                        `[${i + 1}/${SAMPLE_PASSAGES.length}] ✓ ${sample.label}`,
+                    )
+                } catch (err) {
+                    failures += 1
+                    const errMsg =
+                        err instanceof Error ? err.message : String(err)
+                    log(
+                        `[${i + 1}/${SAMPLE_PASSAGES.length}] ✗ ${sample.label}: ${errMsg}`,
+                    )
+                    setPipelineProgress((prev) => ({ ...prev, failures }))
+                }
+            }
+
+            renderer.destroy()
+            setPipelineProgress({
+                current: SAMPLE_PASSAGES.length,
+                total: SAMPLE_PASSAGES.length,
+                stage: "done",
+                failures,
+            })
+            setStatus(
+                `Sample batch done: ${SAMPLE_PASSAGES.length - failures}/${SAMPLE_PASSAGES.length} ok. Scroll down to see results.`,
+            )
+            log(
+                `=== Sample batch complete: ${SAMPLE_PASSAGES.length - failures} ok, ${failures} failed ===`,
+            )
+        } catch (err) {
+            const errMsg =
+                err instanceof Error
+                    ? `${err.message}\n${err.stack}`
+                    : String(err)
+            setStatus(`Sample batch error: ${errMsg}`)
+            log(`SAMPLE BATCH ERROR: ${errMsg}`)
+            console.error(err)
+        } finally {
+            setPipelineRunning(false)
+        }
+    }
+
     const handleRunManualPipeline = async () => {
         if (!hwpFile) {
             setStatus("Error: upload a HWP file first.")
@@ -158,7 +276,6 @@ export default function TestHwpPage() {
             })
             log(`[2/3] Composed PNG: ${pngBytes.length} bytes`)
 
-            // Preview
             const blob = new Blob([pngBytes.buffer as ArrayBuffer], {
                 type: "image/png",
             })
@@ -304,7 +421,6 @@ export default function TestHwpPage() {
                 },
             })
 
-            // Download the HWP
             const blob = new Blob([result.hwpBytes.buffer as ArrayBuffer], {
                 type: "application/x-hwp",
             })
@@ -338,7 +454,6 @@ export default function TestHwpPage() {
         }
 
         try {
-            // Minimal ZIP (store method, no compression) — no dependency needed.
             const { makeZip } = await import("@/lib/passage-pipeline-zip")
             const files: Array<{ name: string; data: Uint8Array }> = []
             const urlList: string[] = []
@@ -463,12 +578,10 @@ export default function TestHwpPage() {
         log(`File: ${file.name}, size: ${file.size} bytes`)
 
         try {
-            // Step 1: Dynamic import
             log("Importing @rhwp/core...")
             const rhwpModule = await import("@rhwp/core")
             log(`Module loaded. Keys: ${Object.keys(rhwpModule).join(", ")}`)
 
-            // Step 2: Register measureTextWidth
             log("Registering measureTextWidth...")
             let ctx: CanvasRenderingContext2D | null = null
             let lastFont = ""
@@ -488,12 +601,10 @@ export default function TestHwpPage() {
                 return ctx?.measureText(text).width ?? 0
             }
 
-            // Step 3: WASM init
             log("Initializing WASM...")
             await rhwpModule.default({ module_or_path: "/rhwp_bg.wasm" })
             log("WASM initialized!")
 
-            // Step 4: Load document
             log("Reading file buffer...")
             const buffer = new Uint8Array(await file.arrayBuffer())
             log(`Buffer size: ${buffer.length} bytes`)
@@ -502,7 +613,6 @@ export default function TestHwpPage() {
             const doc = new rhwpModule.HwpDocument(buffer)
             log("HwpDocument created!")
 
-            // Step 5: Get document info
             const pageCount = doc.pageCount()
             log(`Page count: ${pageCount}`)
 
@@ -512,7 +622,6 @@ export default function TestHwpPage() {
             const docInfo = doc.getDocumentInfo()
             log(`Document info: ${docInfo.slice(0, 500)}`)
 
-            // Step 6: Extract paragraphs with position info (section, para idx)
             log("=== Extracting paragraphs with position ===")
             const lines: string[] = []
             const positionedParas: Array<{
@@ -572,7 +681,6 @@ export default function TestHwpPage() {
                 `Extracted ${positionedParas.length} paragraphs (${lines.length} non-empty)`,
             )
 
-            // Step 6b: Fallback — extract text from HTML rendering
             if (lines.length === 0) {
                 log("=== Method B: renderPageHtml (fallback) ===")
                 for (let page = 0; page < Math.min(pageCount, 3); page++) {
@@ -583,7 +691,6 @@ export default function TestHwpPage() {
                             log(
                                 `  Page ${page} HTML preview: ${html.slice(0, 200)}...`,
                             )
-                            // Strip HTML tags to get text
                             const textOnly = html
                                 .replace(/<[^>]+>/g, " ")
                                 .replace(/\s+/g, " ")
@@ -614,46 +721,45 @@ export default function TestHwpPage() {
                 `Extracted ${fullText.length} chars (${lines.length} paragraphs). Detecting passages...`,
             )
 
-            // Step 7: Detect passages using position-aware detector
-            const { detectPassagesFromParagraphs, diagnoseQuestionHeaders } =
+            const { detectPassagesHybrid, diagnoseQuestionHeaders } =
                 await import("@/lib/hwp-utils")
-            const detected = detectPassagesFromParagraphs(positionedParas)
-            setPassages(detected)
-            log(
-                `Detected ${detected.length} passages: ${detected.map((p) => `Q${p.questionNumber}@sec${p.sectionIdx}/para${p.insertAfterParaIdx}`).join(", ")}`,
-            )
 
-            if (detected.length === 0) {
+            log("=== Hybrid detection: trying regex first ===")
+            setStatus("Detecting passages via regex...")
+            const result = await detectPassagesHybrid(positionedParas, {
+                onStageChange: (stage) => {
+                    if (stage === "ai") {
+                        setStatus("Regex weak — calling AI detection (~10s)...")
+                        log(
+                            "Regex result insufficient, falling back to AI detection...",
+                        )
+                    }
+                },
+            })
+
+            setPassages(result.passages)
+            log(
+                `Detection: method=${result.method}, regex=${result.regexCount}, ai=${result.aiCount}, final=${result.passages.length}`,
+            )
+            for (const p of result.passages.slice(0, 30)) {
                 log(
-                    "=== Diagnostic: question-number candidates found in document ===",
+                    `  Q${p.questionNumber} (${p.questionType}) @ sec${p.sectionIdx}/para${p.insertAfterParaIdx} — ${p.englishPassage.length}ch`,
                 )
+            }
+
+            if (result.passages.length === 0) {
+                log("=== No passages found by either method ===")
                 const candidates = diagnoseQuestionHeaders(positionedParas)
                 log(
                     `Found ${candidates.length} question-number candidates (any range)`,
                 )
-                const inRange = candidates.filter(
-                    (c) => c.qNum >= 18 && c.qNum <= 45,
-                )
-                log(`In CSAT reading range (18-45): ${inRange.length}`)
                 for (const c of candidates.slice(0, 20)) {
                     log(`  para ${c.paraIdx}: [Q${c.qNum}] "${c.text}"`)
-                }
-                if (candidates.length === 0) {
-                    log(
-                        "  → No question numbers detected at all. Question headers may use different format.",
-                    )
-                    log("  → Sample of paragraphs with 숫자 at start:")
-                    const numStart = positionedParas
-                        .filter((p) => /^\s*\d+/.test(p.text))
-                        .slice(0, 10)
-                    for (const p of numStart) {
-                        log(`    para ${p.paraIdx}: "${p.text.slice(0, 80)}"`)
-                    }
                 }
             }
 
             setStatus(
-                `Done! ${lines.length} paragraphs, ${fullText.length} chars, ${detected.length} passages found.`,
+                `Done! ${lines.length} paragraphs, ${fullText.length} chars, ${result.passages.length} passages via ${result.method}.`,
             )
 
             doc.free()
@@ -668,562 +774,1290 @@ export default function TestHwpPage() {
         }
     }
 
-    return (
-        <div
-            style={{
-                padding: 20,
-                maxWidth: 900,
-                margin: "0 auto",
-                fontFamily: "monospace",
-            }}
-        >
-            <h1>HWP Text Extraction Test (@rhwp/core)</h1>
+    // ===== Design tokens (Paper & Ink palette) =====
+    const T = {
+        paper50: "#FDFBF7",
+        paper100: "#FAF7F2",
+        paper200: "#F3EEE4",
+        paper300: "#E8DFCE",
+        paper400: "#C9BBA3",
+        ink900: "#1A1915",
+        ink700: "#3C3A33",
+        ink500: "#7A746A",
+        ink300: "#B8B0A2",
+        inkBlue: "#2E5BFF",
+        coral: "#FF6B6B",
+        mustard: "#F4B740",
+        sage: "#7CB342",
+        lavender: "#B794F4",
+        blueWash: "#E8EFFF",
+        pinkWash: "#FFE8E8",
+        yellowWash: "#FFF4DB",
+        greenWash: "#EBF5E0",
+        lavenderWash: "#F0E8FF",
+        fontDisplay:
+            "'Gaegu', 'Hi Melody', 'Nanum Pen Script', 'Noto Sans KR', cursive",
+        fontSans:
+            "'Pretendard Variable', 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif",
+        fontMono:
+            "'JetBrains Mono', 'D2Coding', 'SF Mono', Consolas, monospace",
+        shadowSoft:
+            "0 1px 0 rgba(232,223,206,1), 0 8px 20px rgba(26,25,21,0.06)",
+        shadowLift:
+            "0 4px 12px rgba(26,25,21,0.08), 0 12px 28px rgba(26,25,21,0.05)",
+    }
 
-            <input
-                type="file"
-                accept=".hwp,.hwpx"
-                onChange={handleFileChange}
-                style={{ marginBottom: 16, fontSize: 16 }}
+    const buttonBase: React.CSSProperties = {
+        padding: "10px 18px",
+        border: "none",
+        borderRadius: 10,
+        fontSize: 14,
+        fontWeight: 600,
+        fontFamily: T.fontSans,
+        cursor: "pointer",
+        transition: "transform 120ms, box-shadow 200ms",
+        boxShadow: "0 2px 0 rgba(26,25,21,0.12)",
+    }
+
+    const makeButton = (
+        bg: string,
+        fg: string = "#fff",
+        disabled = false,
+    ): React.CSSProperties => ({
+        ...buttonBase,
+        background: disabled ? T.paper300 : bg,
+        color: disabled ? T.ink500 : fg,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.7 : 1,
+    })
+
+    const sectionCard: React.CSSProperties = {
+        background: T.paper50,
+        border: `1px solid ${T.paper300}`,
+        borderRadius: 16,
+        padding: 22,
+        marginBottom: 20,
+        boxShadow: T.shadowSoft,
+    }
+
+    const sectionLegend = (
+        color: string,
+        rotation = -1.5,
+    ): React.CSSProperties => ({
+        display: "inline-block",
+        background: T.paper100,
+        padding: "4px 12px",
+        borderRadius: 8,
+        fontFamily: T.fontDisplay,
+        fontSize: 22,
+        fontWeight: 700,
+        color,
+        transform: `rotate(${rotation}deg)`,
+        border: `2px solid ${color}`,
+        boxShadow: "0 2px 0 rgba(26,25,21,0.08)",
+    })
+
+    const inputBase: React.CSSProperties = {
+        background: T.paper50,
+        color: T.ink900,
+        border: `1px solid ${T.paper300}`,
+        borderRadius: 8,
+        padding: "6px 10px",
+        fontFamily: T.fontSans,
+        fontSize: 14,
+    }
+
+    const hint: React.CSSProperties = {
+        color: T.ink500,
+        fontSize: 13,
+        marginBottom: 12,
+        fontFamily: T.fontSans,
+        lineHeight: 1.6,
+    }
+
+    return (
+        <>
+            {/* Font loading */}
+            <link rel="preconnect" href="https://fonts.googleapis.com" />
+            <link
+                rel="preconnect"
+                href="https://fonts.gstatic.com"
+                crossOrigin=""
+            />
+            <link
+                href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap"
+                rel="stylesheet"
+            />
+            <link
+                rel="stylesheet"
+                href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable.css"
             />
 
-            <p>
-                <strong>Status:</strong> {status}
-            </p>
-
-            <fieldset
+            <div
                 style={{
-                    border: "1px solid #444",
-                    borderRadius: 8,
-                    padding: 12,
-                    marginBottom: 16,
+                    minHeight: "100vh",
+                    padding: "48px 24px 80px",
+                    backgroundColor: T.paper100,
+                    backgroundImage: `
+                        radial-gradient(circle at 18% 22%, rgba(201,187,163,0.08) 1px, transparent 1px),
+                        radial-gradient(circle at 78% 68%, rgba(201,187,163,0.06) 1px, transparent 1px)
+                    `,
+                    backgroundSize: "140px 140px, 200px 200px",
+                    fontFamily: T.fontSans,
+                    color: T.ink900,
                 }}
             >
-                <legend style={{ fontWeight: "bold" }}>
-                    PNG → HWP Insert Test
-                </legend>
                 <div
                     style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
-                        fontSize: 13,
+                        maxWidth: 1040,
+                        margin: "0 auto",
                     }}
                 >
-                    <label>
-                        PNG file:{" "}
-                        <input
-                            type="file"
-                            accept="image/png"
-                            onChange={(e) =>
-                                setPngFile(e.target.files?.[0] ?? null)
-                            }
-                        />
-                        {pngFile && (
-                            <span style={{ marginLeft: 8, color: "#8f8" }}>
-                                {pngFile.name}
-                            </span>
-                        )}
-                    </label>
-                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                        <label>
-                            Section:{" "}
-                            <input
-                                type="number"
-                                min={0}
-                                value={sectionIdx}
-                                onChange={(e) =>
-                                    setSectionIdx(Number(e.target.value))
-                                }
-                                style={{ width: 60 }}
-                            />
-                        </label>
-                        <label>
-                            Paragraph:{" "}
-                            <input
-                                type="number"
-                                min={0}
-                                value={paraIdx}
-                                onChange={(e) =>
-                                    setParaIdx(Number(e.target.value))
-                                }
-                                style={{ width: 60 }}
-                            />
-                        </label>
-                        <label>
-                            Width(px):{" "}
-                            <input
-                                type="number"
-                                min={1}
-                                value={widthPx}
-                                onChange={(e) =>
-                                    setWidthPx(Number(e.target.value))
-                                }
-                                style={{ width: 70 }}
-                            />
-                        </label>
-                        <label>
-                            Height(px):{" "}
-                            <input
-                                type="number"
-                                min={1}
-                                value={heightPx}
-                                onChange={(e) =>
-                                    setHeightPx(Number(e.target.value))
-                                }
-                                style={{ width: 70 }}
-                            />
-                        </label>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={handleInsertAndDownload}
-                        disabled={!hwpFile || !pngFile || inserting}
-                        style={{
-                            padding: "8px 14px",
-                            background: inserting ? "#555" : "#2a6",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: 6,
-                            cursor: inserting ? "wait" : "pointer",
-                            fontSize: 14,
-                            alignSelf: "flex-start",
-                        }}
-                    >
-                        {inserting ? "Inserting..." : "Insert & Download HWP"}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleBatchInsertAllPassages}
-                        disabled={
-                            !hwpFile ||
-                            !pngFile ||
-                            inserting ||
-                            passages.length === 0
-                        }
-                        style={{
-                            padding: "8px 14px",
-                            background: inserting ? "#555" : "#a62",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: 6,
-                            cursor: inserting ? "wait" : "pointer",
-                            fontSize: 14,
-                            alignSelf: "flex-start",
-                            marginTop: 4,
-                        }}
-                    >
-                        {inserting
-                            ? "Inserting..."
-                            : `Insert below ALL ${passages.length} passage${passages.length === 1 ? "" : "s"}`}
-                    </button>
-                </div>
-            </fieldset>
-
-            <fieldset
-                style={{
-                    border: "2px solid #a80",
-                    borderRadius: 8,
-                    padding: 12,
-                    marginBottom: 16,
-                }}
-            >
-                <legend style={{ fontWeight: "bold", color: "#fc5" }}>
-                    ✏️ Manual passage test (single end-to-end)
-                </legend>
-                <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8 }}>
-                    Paste ANY English passage below and run the pipeline on just
-                    that text. Bypasses passage detection — good for validating
-                    AI → PNG → HWP when detection fails or you want to test
-                    arbitrary content.
-                </div>
-                <label
-                    style={{ display: "block", marginBottom: 6, fontSize: 13 }}
-                >
-                    Passage type:{" "}
-                    <select
-                        value={manualType}
-                        onChange={(e) => setManualType(e.target.value)}
-                        style={{ fontSize: 13, padding: 2 }}
-                    >
-                        <option value="주제">주제 (topic)</option>
-                        <option value="요지">요지 (main idea)</option>
-                        <option value="빈칸 추론">
-                            빈칸 추론 (fill blank)
-                        </option>
-                        <option value="순서 배열">
-                            순서 배열 (sequencing)
-                        </option>
-                        <option value="문장 위치">문장 위치 (insertion)</option>
-                        <option value="함축 의미">함축 의미 (implied)</option>
-                        <option value="제목">제목 (title)</option>
-                        <option value="요약">요약 (summary)</option>
-                    </select>
-                </label>
-                <textarea
-                    value={manualText}
-                    onChange={(e) => setManualText(e.target.value)}
-                    rows={6}
-                    style={{
-                        width: "100%",
-                        fontSize: 13,
-                        fontFamily: "inherit",
-                        padding: 8,
-                        background: "#111",
-                        color: "#ddd",
-                        border: "1px solid #444",
-                        borderRadius: 4,
-                        marginBottom: 8,
-                    }}
-                    placeholder="Paste English reading passage here..."
-                />
-                <button
-                    type="button"
-                    onClick={handleRunManualPipeline}
-                    disabled={
-                        !hwpFile ||
-                        !manualText.trim() ||
-                        pipelineRunning ||
-                        inserting
-                    }
-                    style={{
-                        padding: "10px 16px",
-                        background: pipelineRunning ? "#555" : "#a80",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: pipelineRunning ? "wait" : "pointer",
-                        fontSize: 14,
-                        fontWeight: "bold",
-                    }}
-                >
-                    {pipelineRunning
-                        ? "Running manual pipeline..."
-                        : "Generate & Insert (1 passage)"}
-                </button>
-                {manualResult && (
-                    <div
-                        style={{
-                            marginTop: 12,
-                            borderTop: "1px solid #444",
-                            paddingTop: 12,
-                        }}
-                    >
-                        <img
-                            src={manualResult.pngDataUrl}
-                            alt="Generated diagram"
+                    {/* Hero */}
+                    <header style={{ marginBottom: 40 }}>
+                        <div
                             style={{
-                                maxWidth: "100%",
-                                maxHeight: 400,
-                                border: "1px solid #333",
-                                borderRadius: 4,
-                                background: "#fff",
+                                fontSize: 12,
+                                letterSpacing: "0.2em",
+                                textTransform: "uppercase",
+                                color: T.inkBlue,
+                                fontWeight: 700,
+                                marginBottom: 12,
                             }}
-                        />
-                        <div style={{ marginTop: 6, fontSize: 11 }}>
-                            <a
-                                href={manualResult.shareUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ color: "#8cf" }}
-                            >
-                                Open in draw.io viewer ↗
-                            </a>
-                            {" · "}
-                            <span style={{ color: "#888" }}>
-                                {manualResult.xml.length} chars XML
-                            </span>
+                        >
+                            HWP · AI · DIAGRAM PIPELINE
                         </div>
-                        <details style={{ marginTop: 6, fontSize: 11 }}>
-                            <summary
-                                style={{ cursor: "pointer", color: "#888" }}
+                        <h1
+                            style={{
+                                margin: 0,
+                                fontSize: 54,
+                                lineHeight: 1.1,
+                                fontWeight: 800,
+                                color: T.ink900,
+                                letterSpacing: "-0.02em",
+                            }}
+                        >
+                            수능 지문이{" "}
+                            <span
+                                style={{
+                                    position: "relative",
+                                    display: "inline-block",
+                                    fontFamily: T.fontDisplay,
+                                    fontWeight: 700,
+                                }}
                             >
-                                View XML
+                                <span
+                                    style={{
+                                        position: "absolute",
+                                        left: "-4%",
+                                        right: "-4%",
+                                        bottom: "6%",
+                                        height: "38%",
+                                        background: T.mustard,
+                                        opacity: 0.55,
+                                        zIndex: -1,
+                                        borderRadius: 4,
+                                    }}
+                                    aria-hidden="true"
+                                />
+                                다이어그램
+                            </span>
+                            <br />
+                            으로 변하는 순간.
+                        </h1>
+                        <p
+                            style={{
+                                fontSize: 17,
+                                color: T.ink700,
+                                lineHeight: 1.7,
+                                maxWidth: 680,
+                                marginTop: 18,
+                            }}
+                        >
+                            HWP 한 번 올리면, 영어 지문마다 AI가 구조
+                            다이어그램을 그려 다시 HWP에 넣어드려요. 학생 배포용
+                            공유 URL과 이미지 ZIP도 함께.
+                        </p>
+                    </header>
+
+                    {/* File picker + status */}
+                    <section
+                        style={{
+                            ...sectionCard,
+                            background: T.paper50,
+                            padding: 24,
+                        }}
+                    >
+                        <div
+                            style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 14,
+                                alignItems: "center",
+                                marginBottom: 14,
+                            }}
+                        >
+                            <label
+                                style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 10,
+                                    padding: "10px 16px",
+                                    background: T.inkBlue,
+                                    color: "#fff",
+                                    borderRadius: 10,
+                                    fontWeight: 600,
+                                    fontSize: 14,
+                                    cursor: "pointer",
+                                    boxShadow: "0 2px 0 rgba(26,25,21,0.12)",
+                                }}
+                            >
+                                📄 HWP 파일 선택
+                                <input
+                                    type="file"
+                                    accept=".hwp,.hwpx"
+                                    onChange={handleFileChange}
+                                    style={{ display: "none" }}
+                                />
+                            </label>
+                            {hwpFile && (
+                                <span
+                                    style={{
+                                        fontSize: 13,
+                                        color: T.ink700,
+                                        background: T.yellowWash,
+                                        padding: "6px 12px",
+                                        borderRadius: 20,
+                                        transform: "rotate(-1deg)",
+                                        border: `1px dashed ${T.mustard}`,
+                                    }}
+                                >
+                                    {hwpFile.name}
+                                </span>
+                            )}
+                        </div>
+                        <div
+                            style={{
+                                padding: "12px 16px",
+                                background: T.paper200,
+                                borderRadius: 10,
+                                borderLeft: `4px solid ${T.sage}`,
+                                fontSize: 14,
+                                color: T.ink700,
+                                lineHeight: 1.6,
+                                fontFamily: T.fontMono,
+                            }}
+                        >
+                            <strong style={{ color: T.ink900 }}>Status</strong>{" "}
+                            · {status}
+                        </div>
+                    </section>
+
+                    {/* PNG → HWP Insert (manual PNG) */}
+                    <section style={sectionCard}>
+                        <legend style={sectionLegend(T.inkBlue, -1)}>
+                            📎 PNG → HWP 직접 삽입
+                        </legend>
+                        <p style={hint}>
+                            이미 만들어둔 PNG를 지정한 위치에 바로 삽입합니다.
+                            파이프라인을 거치지 않고 검증용으로 쓰세요.
+                        </p>
+                        <div
+                            style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 12,
+                                fontSize: 14,
+                            }}
+                        >
+                            <label
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 10,
+                                }}
+                            >
+                                <span style={{ minWidth: 80, color: T.ink700 }}>
+                                    PNG 파일
+                                </span>
+                                <label
+                                    style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        padding: "6px 12px",
+                                        background: T.paper200,
+                                        border: `1px dashed ${T.paper400}`,
+                                        borderRadius: 8,
+                                        cursor: "pointer",
+                                        fontSize: 13,
+                                        color: T.ink700,
+                                    }}
+                                >
+                                    🖼️ 파일 선택
+                                    <input
+                                        type="file"
+                                        accept="image/png"
+                                        onChange={(e) =>
+                                            setPngFile(
+                                                e.target.files?.[0] ?? null,
+                                            )
+                                        }
+                                        style={{ display: "none" }}
+                                    />
+                                </label>
+                                {pngFile && (
+                                    <span
+                                        style={{
+                                            fontSize: 12,
+                                            color: T.sage,
+                                            fontWeight: 500,
+                                        }}
+                                    >
+                                        ✓ {pngFile.name}
+                                    </span>
+                                )}
+                            </label>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    gap: 14,
+                                    flexWrap: "wrap",
+                                }}
+                            >
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            fontSize: 13,
+                                            color: T.ink700,
+                                        }}
+                                    >
+                                        Section
+                                    </span>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={sectionIdx}
+                                        onChange={(e) =>
+                                            setSectionIdx(
+                                                Number(e.target.value),
+                                            )
+                                        }
+                                        style={{ ...inputBase, width: 70 }}
+                                    />
+                                </label>
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            fontSize: 13,
+                                            color: T.ink700,
+                                        }}
+                                    >
+                                        Paragraph
+                                    </span>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={paraIdx}
+                                        onChange={(e) =>
+                                            setParaIdx(Number(e.target.value))
+                                        }
+                                        style={{ ...inputBase, width: 70 }}
+                                    />
+                                </label>
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            fontSize: 13,
+                                            color: T.ink700,
+                                        }}
+                                    >
+                                        Width(px)
+                                    </span>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        value={widthPx}
+                                        onChange={(e) =>
+                                            setWidthPx(Number(e.target.value))
+                                        }
+                                        style={{ ...inputBase, width: 80 }}
+                                    />
+                                </label>
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            fontSize: 13,
+                                            color: T.ink700,
+                                        }}
+                                    >
+                                        Height(px)
+                                    </span>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        value={heightPx}
+                                        onChange={(e) =>
+                                            setHeightPx(Number(e.target.value))
+                                        }
+                                        style={{ ...inputBase, width: 80 }}
+                                    />
+                                </label>
+                            </div>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    gap: 10,
+                                    flexWrap: "wrap",
+                                }}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={handleInsertAndDownload}
+                                    disabled={!hwpFile || !pngFile || inserting}
+                                    style={makeButton(
+                                        T.inkBlue,
+                                        "#fff",
+                                        !hwpFile || !pngFile || inserting,
+                                    )}
+                                >
+                                    {inserting
+                                        ? "삽입 중..."
+                                        : "📌 삽입 & 다운로드"}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleBatchInsertAllPassages}
+                                    disabled={
+                                        !hwpFile ||
+                                        !pngFile ||
+                                        inserting ||
+                                        passages.length === 0
+                                    }
+                                    style={makeButton(
+                                        T.mustard,
+                                        T.ink900,
+                                        !hwpFile ||
+                                            !pngFile ||
+                                            inserting ||
+                                            passages.length === 0,
+                                    )}
+                                >
+                                    {inserting
+                                        ? "삽입 중..."
+                                        : `📚 모든 지문에 일괄 삽입 (${passages.length})`}
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Visual verification */}
+                    <section
+                        style={{
+                            ...sectionCard,
+                            background: T.pinkWash,
+                            border: `1px solid ${T.coral}`,
+                        }}
+                    >
+                        <legend style={sectionLegend(T.coral, -2.5)}>
+                            🎨 디자인 미리보기 (6개 샘플)
+                        </legend>
+                        <p style={hint}>
+                            요지·주제·빈칸·순서·심경·제목 6개 유형별 샘플 지문을
+                            파이프라인에 돌려봐요. HWP 업로드 불필요 —{" "}
+                            <em>시각 품질만 빠르게 확인</em>.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={handleRunSampleBatch}
+                            disabled={pipelineRunning || inserting}
+                            style={makeButton(
+                                T.coral,
+                                "#fff",
+                                pipelineRunning || inserting,
+                            )}
+                        >
+                            {pipelineRunning
+                                ? `진행 중... ${pipelineProgress.current}/${pipelineProgress.total}`
+                                : "✨ 6개 샘플 돌려보기"}
+                        </button>
+                    </section>
+
+                    {/* Manual single passage */}
+                    <section
+                        style={{
+                            ...sectionCard,
+                            background: T.yellowWash,
+                            border: `1px solid ${T.mustard}`,
+                        }}
+                    >
+                        <legend style={sectionLegend(T.mustard, 1.5)}>
+                            ✏️ 지문 직접 붙여넣기 (1개 end-to-end)
+                        </legend>
+                        <p style={hint}>
+                            임의의 영어 지문을 붙여넣고 AI → PNG → HWP 삽입을 한
+                            번에. 감지가 실패했거나 특정 지문만 테스트할 때.
+                        </p>
+                        <label
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                marginBottom: 10,
+                                fontSize: 14,
+                                color: T.ink700,
+                            }}
+                        >
+                            지문 유형
+                            <select
+                                value={manualType}
+                                onChange={(e) => setManualType(e.target.value)}
+                                style={{ ...inputBase, fontSize: 14 }}
+                            >
+                                <option value="주제">주제 (topic)</option>
+                                <option value="요지">요지 (main idea)</option>
+                                <option value="빈칸 추론">
+                                    빈칸 추론 (fill blank)
+                                </option>
+                                <option value="순서 배열">
+                                    순서 배열 (sequencing)
+                                </option>
+                                <option value="문장 위치">
+                                    문장 위치 (insertion)
+                                </option>
+                                <option value="함축 의미">
+                                    함축 의미 (implied)
+                                </option>
+                                <option value="제목">제목 (title)</option>
+                                <option value="요약">요약 (summary)</option>
+                            </select>
+                        </label>
+                        <textarea
+                            value={manualText}
+                            onChange={(e) => setManualText(e.target.value)}
+                            rows={6}
+                            style={{
+                                ...inputBase,
+                                width: "100%",
+                                fontSize: 14,
+                                padding: 12,
+                                marginBottom: 10,
+                                lineHeight: 1.6,
+                                background: T.paper50,
+                            }}
+                            placeholder="Paste English reading passage here..."
+                        />
+                        <button
+                            type="button"
+                            onClick={handleRunManualPipeline}
+                            disabled={
+                                !hwpFile ||
+                                !manualText.trim() ||
+                                pipelineRunning ||
+                                inserting
+                            }
+                            style={makeButton(
+                                T.mustard,
+                                T.ink900,
+                                !hwpFile ||
+                                    !manualText.trim() ||
+                                    pipelineRunning ||
+                                    inserting,
+                            )}
+                        >
+                            {pipelineRunning
+                                ? "진행 중..."
+                                : "🪄 생성 & 삽입 (1개)"}
+                        </button>
+                        {manualResult && (
+                            <div
+                                style={{
+                                    marginTop: 18,
+                                    paddingTop: 16,
+                                    borderTop: `1px dashed ${T.paper400}`,
+                                }}
+                            >
+                                <img
+                                    src={manualResult.pngDataUrl}
+                                    alt="Generated diagram"
+                                    style={{
+                                        maxWidth: "100%",
+                                        maxHeight: 440,
+                                        border: `1px solid ${T.paper300}`,
+                                        borderRadius: 10,
+                                        background: "#fff",
+                                        boxShadow: T.shadowSoft,
+                                    }}
+                                />
+                                <div
+                                    style={{
+                                        marginTop: 10,
+                                        fontSize: 12,
+                                        color: T.ink500,
+                                    }}
+                                >
+                                    <a
+                                        href={manualResult.shareUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{
+                                            color: T.inkBlue,
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        draw.io에서 열기 ↗
+                                    </a>
+                                    {" · "}
+                                    {manualResult.xml.length} chars XML
+                                </div>
+                                <details style={{ marginTop: 8, fontSize: 12 }}>
+                                    <summary
+                                        style={{
+                                            cursor: "pointer",
+                                            color: T.ink500,
+                                        }}
+                                    >
+                                        XML 보기
+                                    </summary>
+                                    <pre
+                                        style={{
+                                            whiteSpace: "pre-wrap",
+                                            fontSize: 11,
+                                            background: T.paper200,
+                                            color: T.ink700,
+                                            padding: 12,
+                                            borderRadius: 8,
+                                            maxHeight: 240,
+                                            overflow: "auto",
+                                            fontFamily: T.fontMono,
+                                        }}
+                                    >
+                                        {manualResult.xml}
+                                    </pre>
+                                </details>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Full AI Pipeline */}
+                    <section
+                        style={{
+                            ...sectionCard,
+                            background: T.greenWash,
+                            border: `1px solid ${T.sage}`,
+                        }}
+                    >
+                        <legend style={sectionLegend(T.sage, -0.5)}>
+                            🤖 전체 AI 파이프라인 (지문 → HWP)
+                        </legend>
+                        <p style={hint}>
+                            감지된 지문 모두에 대해 AI → PNG → HWP 삽입을 자동
+                            실행. 지문당 10~20초 소요. Width/Height는 위 값
+                            사용.
+                        </p>
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: 10,
+                                flexWrap: "wrap",
+                            }}
+                        >
+                            <button
+                                type="button"
+                                onClick={handleRunFullPipeline}
+                                disabled={
+                                    !hwpFile ||
+                                    passages.length === 0 ||
+                                    pipelineRunning ||
+                                    inserting
+                                }
+                                style={makeButton(
+                                    T.sage,
+                                    "#fff",
+                                    !hwpFile ||
+                                        passages.length === 0 ||
+                                        pipelineRunning ||
+                                        inserting,
+                                )}
+                            >
+                                {pipelineRunning
+                                    ? `진행 중 ${pipelineProgress.current}/${pipelineProgress.total}`
+                                    : `🚀 ${passages.length}개 지문 파이프라인 실행`}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDownloadPngZip}
+                                disabled={
+                                    passageResults.size === 0 || pipelineRunning
+                                }
+                                style={makeButton(
+                                    T.lavender,
+                                    "#fff",
+                                    passageResults.size === 0 ||
+                                        pipelineRunning,
+                                )}
+                            >
+                                📦 ZIP 다운로드 ({passageResults.size}개)
+                            </button>
+                        </div>
+                        {pipelineRunning && (
+                            <div style={{ marginTop: 14 }}>
+                                <div
+                                    style={{
+                                        background: T.paper300,
+                                        height: 10,
+                                        borderRadius: 10,
+                                        overflow: "hidden",
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            background: T.sage,
+                                            height: "100%",
+                                            width: `${(pipelineProgress.current / Math.max(1, pipelineProgress.total)) * 100}%`,
+                                            transition: "width 0.3s",
+                                        }}
+                                    />
+                                </div>
+                                <div
+                                    style={{
+                                        marginTop: 6,
+                                        fontSize: 12,
+                                        color: T.ink700,
+                                    }}
+                                >
+                                    {pipelineProgress.stage}
+                                    {pipelineProgress.failures > 0 && (
+                                        <span
+                                            style={{
+                                                color: T.coral,
+                                                marginLeft: 10,
+                                                fontWeight: 600,
+                                            }}
+                                        >
+                                            · {pipelineProgress.failures}개 실패
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Debug log */}
+                    <details
+                        style={{
+                            ...sectionCard,
+                            background: T.paper50,
+                            padding: 0,
+                            overflow: "hidden",
+                        }}
+                    >
+                        <summary
+                            style={{
+                                cursor: "pointer",
+                                padding: "14px 22px",
+                                fontWeight: 700,
+                                color: T.ink900,
+                                background: T.paper200,
+                                fontSize: 14,
+                                userSelect: "none",
+                            }}
+                        >
+                            🔍 디버그 로그 ({debugLog.length}줄)
+                        </summary>
+                        <div
+                            style={{
+                                padding: 16,
+                                maxHeight: 400,
+                                overflow: "auto",
+                                fontFamily: T.fontMono,
+                                fontSize: 12,
+                                lineHeight: 1.6,
+                                background: T.paper50,
+                                backgroundImage: `repeating-linear-gradient(
+                                    to bottom,
+                                    transparent 0,
+                                    transparent 19px,
+                                    rgba(46,91,255,0.05) 19px,
+                                    rgba(46,91,255,0.05) 20px
+                                )`,
+                            }}
+                        >
+                            {debugLog.length === 0 && (
+                                <p style={{ color: T.ink500 }}>
+                                    파일을 선택하면 로그가 나와요...
+                                </p>
+                            )}
+                            {debugLog.map((line, i) => (
+                                <div
+                                    key={i}
+                                    style={{
+                                        color: line.includes("ERROR")
+                                            ? T.coral
+                                            : line.includes("✓") ||
+                                                line.includes("done")
+                                              ? T.sage
+                                              : line.includes("===")
+                                                ? T.inkBlue
+                                                : T.ink700,
+                                        fontWeight: line.includes("===")
+                                            ? 600
+                                            : 400,
+                                    }}
+                                >
+                                    {line}
+                                </div>
+                            ))}
+                        </div>
+                    </details>
+
+                    {/* Sample pipeline results grid (no HWP case) */}
+                    {passageResults.size > 0 && passages.length === 0 && (
+                        <div style={{ marginTop: 32, marginBottom: 24 }}>
+                            <h2
+                                style={{
+                                    fontFamily: T.fontDisplay,
+                                    fontSize: 36,
+                                    color: T.ink900,
+                                    marginBottom: 16,
+                                    transform: "rotate(-1deg)",
+                                    display: "inline-block",
+                                }}
+                            >
+                                📒 샘플 결과 ({passageResults.size}개)
+                            </h2>
+                            <div
+                                style={{
+                                    display: "grid",
+                                    gridTemplateColumns:
+                                        "repeat(auto-fill, minmax(320px, 1fr))",
+                                    gap: 16,
+                                }}
+                            >
+                                {[...passageResults.entries()]
+                                    .sort((a, b) => a[0] - b[0])
+                                    .map(([qNum, r], i) => (
+                                        <div
+                                            key={qNum}
+                                            style={{
+                                                background: T.paper50,
+                                                border: `1px solid ${T.paper300}`,
+                                                borderRadius: 12,
+                                                padding: 12,
+                                                boxShadow: T.shadowSoft,
+                                                transform: `rotate(${i % 2 === 0 ? -0.5 : 0.5}deg)`,
+                                            }}
+                                        >
+                                            <img
+                                                src={r.pngDataUrl}
+                                                alt={`Q${qNum}`}
+                                                style={{
+                                                    width: "100%",
+                                                    border: `1px solid ${T.paper300}`,
+                                                    borderRadius: 8,
+                                                    background: "#fff",
+                                                }}
+                                            />
+                                            <div
+                                                style={{
+                                                    marginTop: 8,
+                                                    fontSize: 12,
+                                                    color: T.ink500,
+                                                }}
+                                            >
+                                                <a
+                                                    href={r.shareUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{
+                                                        color: T.inkBlue,
+                                                        fontWeight: 600,
+                                                    }}
+                                                >
+                                                    draw.io ↗
+                                                </a>
+                                                <span
+                                                    style={{ marginLeft: 10 }}
+                                                >
+                                                    {r.xml.length}ch XML
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Detected passages */}
+                    {passages.length > 0 && (
+                        <div style={{ marginTop: 32 }}>
+                            <h2
+                                style={{
+                                    fontFamily: T.fontDisplay,
+                                    fontSize: 40,
+                                    color: T.ink900,
+                                    marginBottom: 6,
+                                    transform: "rotate(-1deg)",
+                                    display: "inline-block",
+                                }}
+                            >
+                                📖 감지된 지문 ({passages.length}개)
+                            </h2>
+                            <p
+                                style={{
+                                    fontSize: 14,
+                                    color: T.ink500,
+                                    marginBottom: 20,
+                                }}
+                            >
+                                카드의 <em>"삽입 위치 지정"</em>을 누르면 상단
+                                Section/Paragraph가 자동 업데이트됩니다.
+                            </p>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 16,
+                                }}
+                            >
+                                {passages.map((p, idx) => {
+                                    const typeColor = colorForType(
+                                        p.questionType,
+                                        T,
+                                    )
+                                    const rotation =
+                                        idx % 3 === 0
+                                            ? -0.3
+                                            : idx % 3 === 1
+                                              ? 0.2
+                                              : -0.1
+                                    return (
+                                        <article
+                                            key={p.questionNumber}
+                                            style={{
+                                                background: T.paper50,
+                                                borderRadius: 14,
+                                                padding: 20,
+                                                borderLeft: `6px solid ${typeColor}`,
+                                                border: `1px solid ${T.paper300}`,
+                                                borderLeftWidth: 6,
+                                                boxShadow: T.shadowSoft,
+                                                transform: `rotate(${rotation}deg)`,
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    justifyContent:
+                                                        "space-between",
+                                                    alignItems: "flex-start",
+                                                    gap: 12,
+                                                    flexWrap: "wrap",
+                                                }}
+                                            >
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            display:
+                                                                "inline-block",
+                                                            fontSize: 11,
+                                                            letterSpacing:
+                                                                "0.1em",
+                                                            textTransform:
+                                                                "uppercase",
+                                                            color: typeColor,
+                                                            fontWeight: 700,
+                                                            marginBottom: 4,
+                                                        }}
+                                                    >
+                                                        {p.questionType}
+                                                    </div>
+                                                    <h3
+                                                        style={{
+                                                            margin: 0,
+                                                            fontSize: 22,
+                                                            fontWeight: 700,
+                                                            color: T.ink900,
+                                                            fontFamily:
+                                                                T.fontSans,
+                                                        }}
+                                                    >
+                                                        Q{p.questionNumber}
+                                                    </h3>
+                                                </div>
+                                                <div
+                                                    style={{
+                                                        display: "flex",
+                                                        gap: 10,
+                                                        alignItems: "center",
+                                                    }}
+                                                >
+                                                    <span
+                                                        style={{
+                                                            color: T.ink500,
+                                                            fontSize: 11,
+                                                            fontFamily:
+                                                                T.fontMono,
+                                                        }}
+                                                    >
+                                                        sec {p.sectionIdx} ·
+                                                        para{" "}
+                                                        {p.insertAfterParaIdx}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSectionIdx(
+                                                                p.sectionIdx,
+                                                            )
+                                                            setParaIdx(
+                                                                p.insertAfterParaIdx,
+                                                            )
+                                                            setStatus(
+                                                                `Target set: Q${p.questionNumber} (sec=${p.sectionIdx}, para=${p.insertAfterParaIdx})`,
+                                                            )
+                                                        }}
+                                                        style={{
+                                                            padding: "6px 12px",
+                                                            fontSize: 12,
+                                                            background:
+                                                                T.paper200,
+                                                            color: T.ink900,
+                                                            border: `1px solid ${T.paper400}`,
+                                                            borderRadius: 6,
+                                                            cursor: "pointer",
+                                                            fontWeight: 600,
+                                                            fontFamily:
+                                                                T.fontSans,
+                                                        }}
+                                                    >
+                                                        삽입 위치 지정 →
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {p.koreanInstruction && (
+                                                <p
+                                                    style={{
+                                                        color: T.ink500,
+                                                        fontSize: 13,
+                                                        marginTop: 10,
+                                                        marginBottom: 10,
+                                                        fontStyle: "italic",
+                                                    }}
+                                                >
+                                                    {p.koreanInstruction}
+                                                </p>
+                                            )}
+                                            <p
+                                                style={{
+                                                    color: T.ink900,
+                                                    fontSize: 14,
+                                                    lineHeight: 1.7,
+                                                    whiteSpace: "pre-wrap",
+                                                    wordBreak: "break-word",
+                                                    margin: "8px 0",
+                                                }}
+                                            >
+                                                {p.englishPassage.slice(0, 300)}
+                                                {p.englishPassage.length > 300
+                                                    ? "..."
+                                                    : ""}
+                                            </p>
+                                            <div
+                                                style={{
+                                                    fontSize: 11,
+                                                    color: T.ink500,
+                                                    fontFamily: T.fontMono,
+                                                }}
+                                            >
+                                                {p.englishPassage.length}자 ·{" "}
+                                                {p.choices.length}개 선지
+                                            </div>
+                                            {passageResults.get(
+                                                p.questionNumber,
+                                            ) && (
+                                                <div
+                                                    style={{
+                                                        marginTop: 14,
+                                                        paddingTop: 12,
+                                                        borderTop: `1px dashed ${T.paper400}`,
+                                                    }}
+                                                >
+                                                    <img
+                                                        src={
+                                                            passageResults.get(
+                                                                p.questionNumber,
+                                                            )?.pngDataUrl
+                                                        }
+                                                        alt={`Diagram for Q${p.questionNumber}`}
+                                                        style={{
+                                                            maxWidth: "100%",
+                                                            maxHeight: 320,
+                                                            border: `1px solid ${T.paper300}`,
+                                                            borderRadius: 8,
+                                                            background: "#fff",
+                                                        }}
+                                                    />
+                                                    <div
+                                                        style={{
+                                                            marginTop: 6,
+                                                            fontSize: 12,
+                                                        }}
+                                                    >
+                                                        <a
+                                                            href={
+                                                                passageResults.get(
+                                                                    p.questionNumber,
+                                                                )?.shareUrl
+                                                            }
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            style={{
+                                                                color: T.inkBlue,
+                                                                fontWeight: 600,
+                                                            }}
+                                                        >
+                                                            draw.io에서 열기 ↗
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </article>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {text && (
+                        <details
+                            style={{
+                                marginTop: 32,
+                                background: T.paper50,
+                                border: `1px solid ${T.paper300}`,
+                                borderRadius: 14,
+                                padding: 0,
+                                overflow: "hidden",
+                            }}
+                        >
+                            <summary
+                                style={{
+                                    cursor: "pointer",
+                                    padding: "14px 22px",
+                                    fontWeight: 700,
+                                    color: T.ink900,
+                                    background: T.paper200,
+                                    fontSize: 14,
+                                }}
+                            >
+                                📝 추출된 원문 미리보기 (첫 3000자)
                             </summary>
                             <pre
                                 style={{
                                     whiteSpace: "pre-wrap",
-                                    fontSize: 10,
-                                    background: "#0a0a0a",
-                                    padding: 8,
-                                    borderRadius: 4,
-                                    maxHeight: 200,
+                                    fontSize: 13,
+                                    background: T.paper50,
+                                    color: T.ink700,
+                                    padding: 18,
+                                    margin: 0,
+                                    maxHeight: 400,
                                     overflow: "auto",
+                                    fontFamily: T.fontMono,
+                                    lineHeight: 1.6,
                                 }}
                             >
-                                {manualResult.xml}
+                                {text}
                             </pre>
                         </details>
-                    </div>
-                )}
-            </fieldset>
+                    )}
 
-            <fieldset
-                style={{
-                    border: "2px solid #2a6",
-                    borderRadius: 8,
-                    padding: 12,
-                    marginBottom: 16,
-                }}
-            >
-                <legend style={{ fontWeight: "bold", color: "#5c9" }}>
-                    🤖 Full AI Pipeline (passages → AI XML → PNG → HWP)
-                </legend>
-                <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8 }}>
-                    Sends each detected passage to the AI, renders the returned
-                    draw.io XML to PNG (via hidden iframe), and inserts every
-                    diagram at its passage location. Uses the Width/Height
-                    values above.
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                        type="button"
-                        onClick={handleRunFullPipeline}
-                        disabled={
-                            !hwpFile ||
-                            passages.length === 0 ||
-                            pipelineRunning ||
-                            inserting
-                        }
+                    {/* Footer */}
+                    <footer
                         style={{
-                            padding: "10px 16px",
-                            background: pipelineRunning ? "#555" : "#2a6",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: 6,
-                            cursor: pipelineRunning ? "wait" : "pointer",
-                            fontSize: 14,
-                            fontWeight: "bold",
+                            marginTop: 60,
+                            paddingTop: 24,
+                            borderTop: `1px dashed ${T.paper400}`,
+                            textAlign: "center",
+                            color: T.ink500,
+                            fontSize: 13,
                         }}
                     >
-                        {pipelineRunning
-                            ? `Running... ${pipelineProgress.current}/${pipelineProgress.total} (${pipelineProgress.stage})`
-                            : `Run pipeline for ${passages.length} passage${passages.length === 1 ? "" : "s"}`}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleDownloadPngZip}
-                        disabled={passageResults.size === 0 || pipelineRunning}
-                        style={{
-                            padding: "10px 16px",
-                            background:
-                                passageResults.size === 0 ? "#333" : "#36a",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: 6,
-                            cursor:
-                                passageResults.size === 0
-                                    ? "not-allowed"
-                                    : "pointer",
-                            fontSize: 14,
-                        }}
-                    >
-                        Download ZIP ({passageResults.size} PNGs + URLs)
-                    </button>
-                </div>
-                {pipelineRunning && (
-                    <div style={{ marginTop: 8, fontSize: 12 }}>
-                        <div
+                        <span
                             style={{
-                                background: "#222",
-                                height: 8,
-                                borderRadius: 4,
-                                overflow: "hidden",
+                                fontFamily: T.fontDisplay,
+                                fontSize: 16,
+                                color: T.ink700,
                             }}
                         >
-                            <div
-                                style={{
-                                    background: "#2a6",
-                                    height: "100%",
-                                    width: `${(pipelineProgress.current / Math.max(1, pipelineProgress.total)) * 100}%`,
-                                    transition: "width 0.3s",
-                                }}
-                            />
-                        </div>
-                        {pipelineProgress.failures > 0 && (
-                            <div style={{ color: "#f88", marginTop: 4 }}>
-                                {pipelineProgress.failures} failure(s) so far
-                            </div>
-                        )}
-                    </div>
-                )}
-            </fieldset>
-
-            {/* Debug Log - always visible */}
-            <div
-                style={{
-                    background: "#0a0a0a",
-                    border: "1px solid #333",
-                    borderRadius: 8,
-                    padding: 12,
-                    marginBottom: 16,
-                    maxHeight: 400,
-                    overflow: "auto",
-                    fontSize: 12,
-                    lineHeight: 1.5,
-                }}
-            >
-                <strong>Debug Log:</strong>
-                {debugLog.length === 0 && (
-                    <p style={{ color: "#666" }}>Select a file to start...</p>
-                )}
-                {debugLog.map((line, i) => (
-                    <div
-                        key={i}
-                        style={{
-                            color: line.includes("ERROR")
-                                ? "#ff4444"
-                                : line.includes("!")
-                                  ? "#44ff44"
-                                  : "#ccc",
-                        }}
-                    >
-                        {line}
-                    </div>
-                ))}
+                            달의이성 HWP Lab · AI + draw.io + rhwp
+                        </span>
+                    </footer>
+                </div>
             </div>
-
-            {passages.length > 0 && (
-                <div>
-                    <h2>Detected Passages ({passages.length})</h2>
-                    {passages.map((p) => (
-                        <div
-                            key={p.questionNumber}
-                            style={{
-                                border: "1px solid #444",
-                                borderRadius: 8,
-                                padding: 12,
-                                marginBottom: 12,
-                                background: "#1a1a2e",
-                            }}
-                        >
-                            <div
-                                style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                    gap: 8,
-                                }}
-                            >
-                                <h3 style={{ margin: 0 }}>
-                                    Q{p.questionNumber} — {p.questionType}
-                                </h3>
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        gap: 8,
-                                        alignItems: "center",
-                                    }}
-                                >
-                                    <span
-                                        style={{ color: "#888", fontSize: 11 }}
-                                    >
-                                        sec {p.sectionIdx} / para{" "}
-                                        {p.insertAfterParaIdx}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setSectionIdx(p.sectionIdx)
-                                            setParaIdx(p.insertAfterParaIdx)
-                                            setStatus(
-                                                `Target set: Q${p.questionNumber} (sec=${p.sectionIdx}, para=${p.insertAfterParaIdx})`,
-                                            )
-                                        }}
-                                        style={{
-                                            padding: "4px 10px",
-                                            fontSize: 12,
-                                            background: "#445",
-                                            color: "#fff",
-                                            border: "1px solid #667",
-                                            borderRadius: 4,
-                                            cursor: "pointer",
-                                        }}
-                                    >
-                                        Set as insert target
-                                    </button>
-                                </div>
-                            </div>
-                            <p style={{ color: "#aaa", fontSize: 13 }}>
-                                {p.koreanInstruction}
-                            </p>
-                            <p style={{ fontSize: 14, lineHeight: 1.6 }}>
-                                {p.englishPassage.slice(0, 300)}
-                                {p.englishPassage.length > 300 ? "..." : ""}
-                            </p>
-                            <p style={{ color: "#666", fontSize: 11 }}>
-                                {p.englishPassage.length} chars,{" "}
-                                {p.choices.length} choices
-                            </p>
-                            {passageResults.get(p.questionNumber) && (
-                                <div
-                                    style={{
-                                        marginTop: 8,
-                                        borderTop: "1px solid #333",
-                                        paddingTop: 8,
-                                    }}
-                                >
-                                    <img
-                                        src={
-                                            passageResults.get(p.questionNumber)
-                                                ?.pngDataUrl
-                                        }
-                                        alt={`Diagram for Q${p.questionNumber}`}
-                                        style={{
-                                            maxWidth: "100%",
-                                            maxHeight: 300,
-                                            border: "1px solid #333",
-                                            borderRadius: 4,
-                                            background: "#fff",
-                                        }}
-                                    />
-                                    <div style={{ marginTop: 6, fontSize: 11 }}>
-                                        <a
-                                            href={
-                                                passageResults.get(
-                                                    p.questionNumber,
-                                                )?.shareUrl
-                                            }
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            style={{ color: "#8cf" }}
-                                        >
-                                            Open in draw.io viewer ↗
-                                        </a>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {text && (
-                <details open>
-                    <summary
-                        style={{
-                            cursor: "pointer",
-                            fontWeight: "bold",
-                            marginBottom: 8,
-                        }}
-                    >
-                        Raw extracted text (first 3000 chars)
-                    </summary>
-                    <pre
-                        style={{
-                            whiteSpace: "pre-wrap",
-                            fontSize: 12,
-                            background: "#111",
-                            padding: 12,
-                            borderRadius: 8,
-                            maxHeight: 400,
-                            overflow: "auto",
-                            border: "1px solid #333",
-                        }}
-                    >
-                        {text}
-                    </pre>
-                </details>
-            )}
-        </div>
+        </>
     )
+}
+
+// ===== helpers =====
+function colorForType(
+    type: string,
+    T: {
+        inkBlue: string
+        sage: string
+        coral: string
+        mustard: string
+        lavender: string
+        ink500: string
+    },
+): string {
+    switch (type) {
+        case "주제":
+        case "제목":
+            return T.inkBlue
+        case "요지":
+            return T.sage
+        case "빈칸 추론":
+            return T.coral
+        case "순서 배열":
+            return T.mustard
+        case "문장 위치":
+            return T.lavender
+        case "함축 의미":
+            return T.coral
+        case "목적":
+            return T.inkBlue
+        case "심경/분위기":
+            return T.mustard
+        case "무관한 문장":
+            return T.coral
+        case "요약":
+            return T.sage
+        case "어법/어휘":
+            return T.lavender
+        default:
+            return T.ink500
+    }
 }
