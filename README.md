@@ -19,6 +19,43 @@ English | [中文](./docs/cn/README_CN.md) | [日本語](./docs/ja/README_JA.md)
 
 A Next.js web application that integrates AI capabilities with draw.io diagrams. Create, modify, and enhance diagrams through natural language commands and AI-assisted visualization.
 
+---
+
+## 🍴 Fork Notes (Reasonofmoon)
+
+This repository is a fork of [DayuanJiang/next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io), extended for **Korean EdTech use cases** — specifically, turning CSAT (수능) English reading passages from HWP/HWPX files into draw.io diagrams.
+
+### What's added on top of the upstream
+
+- **HWP/HWPX passage extraction pipeline** (`/[lang]/test-hwp`)
+  - Parses Korean `.hwp` / `.hwpx` files directly in the browser, preserving section + paragraph indices for round-trip editing.
+  - Regex-based detector for CSAT reading questions (numbered 18–45), with support for 빈칸 추론, 순서 배열, 문장 위치, 주제/요지, 제목, 요약 등 주요 문항 유형.
+- **AI fallback detection** (`/api/detect-passages`)
+  - When the regex detector under-returns (unusual layouts, passages inside tables, split paragraphs), the full document text is sent to an LLM with a Zod-validated structured-output schema, then fuzzy-matched back to paragraph positions.
+- **Passage → diagram generation** (`/api/generate-passage-diagram`)
+  - Converts an extracted English passage into a draw.io XML diagram (flow / structure / vocabulary map) for classroom use.
+- **Redesigned test-hwp UI**
+  - New layout, per-passage preview, bulk actions, and visual indicators for detection confidence + source (regex vs AI).
+- **Shared AI helpers** (`lib/ai-shared.ts`)
+  - Access-code gating, own-API-key detection, and client provider-override parsing factored out so new API routes stay thin.
+
+### Files introduced by the fork
+
+| Path | Purpose |
+| --- | --- |
+| `app/[lang]/test-hwp/page.tsx` | HWP passage extraction workbench UI |
+| `app/api/detect-passages/route.ts` | LLM passage detection fallback |
+| `app/api/generate-passage-diagram/route.ts` | Passage → draw.io XML generation |
+| `lib/hwp-utils.ts` | HWP/HWPX parsing + regex passage detection |
+| `lib/passage-detection-ai.ts` | AI detection client + fuzzy paragraph mapping |
+| `lib/passage-pipeline.ts` | End-to-end orchestration (regex → AI → diagram) |
+| `lib/passage-samples.ts` | Dev fixtures for CSAT passages |
+| `lib/ai-shared.ts` | Shared auth/quota/override helpers |
+
+All upstream features (chat diagramming, MCP server, multi-provider support, desktop app) continue to work unchanged.
+
+---
+
 > Note: Thanks to <img src="https://raw.githubusercontent.com/DayuanJiang/next-ai-draw-io/main/public/doubao-color.png" alt="" height="20" /> [ByteDance Doubao](https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=Z9Z3LDTJ&utm_campaign=drawio&utm_content=drawio&utm_medium=devrel&utm_source=OWO&utm_term=drawio) sponsorship, the demo site now uses the powerful glm-4.7 model!
 
 
