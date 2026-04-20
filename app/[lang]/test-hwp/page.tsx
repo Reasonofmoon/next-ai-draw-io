@@ -1475,8 +1475,9 @@ export default function TestHwpPage() {
                         </legend>
                         <p style={hint}>
                             감지된 지문 모두에 대해 AI → PNG → HWP 삽입을 자동
-                            실행. 지문당 10~20초 소요. Width/Height는 위 값
-                            사용.
+                            실행합니다. 유형별로 더 보기 좋게 보이도록 스마트
+                            크기와 시각 스타일을 적용하며, 생성 후에는 draw.io
+                            에서 바로 다듬어 출력용으로 활용할 수 있습니다.
                         </p>
                         <div
                             style={{

@@ -6,7 +6,9 @@
  */
 
 import { composeDiagramWithCaption } from "@/lib/diagram-captioner"
+import { getDiagramSizePreset } from "@/lib/diagram-presets"
 import type { DetectedPassage } from "@/lib/hwp-utils"
+import { getDrawioOpenUrlBase } from "@/lib/site-url"
 import { wrapWithMxFile } from "@/lib/utils"
 
 /**
@@ -24,9 +26,12 @@ const STYLE_GUIDE = [
     "  • Blank/placeholder    →  fillColor=#FFFFFF strokeColor=#9CA3AF strokeWidth=2 dashed=1",
     "Shapes: rounded rectangles (rounded=1, arcSize=12). Stroke width 2.",
     "Font: fontFamily=Helvetica, fontSize=13, align=center, verticalAlign=middle.",
-    "Arrows: endArrow=classic, strokeColor=#374151, labels concise (≤3 words).",
-    "Layout: 500–650 wide × 300–400 tall total. Generous spacing (≥20px gaps).",
+    "Arrows: endArrow=classic, strokeColor=#374151, labels concise (≤3 words). Prefer orthogonal connectors over messy diagonals.",
+    "Layout: 500–650 wide × 300–400 tall total. Generous spacing (≥24px gaps).",
     "Keep every label in English, ≤8 words per box.",
+    "Make the composition presentation-ready: balanced alignment, consistent widths, no overlaps, no crowding, and a clear visual hierarchy.",
+    "For printability, use clean white space, strong contrast, and avoid excessive decoration.",
+    "Use 4–7 boxes in most cases. Fewer, clearer boxes are better than a crowded chart.",
 ].join("\n")
 
 /**
@@ -416,6 +421,7 @@ export async function runPassagePipeline(params: {
     passages: DetectedPassage[]
     displayWidthPx?: number
     displayHeightPx?: number
+    smartSizing?: boolean
     concurrency?: number
     onProgress?: (p: PipelineProgress) => void
     signal?: AbortSignal
@@ -429,6 +435,7 @@ export async function runPassagePipeline(params: {
         passages,
         displayWidthPx = 500,
         displayHeightPx = 350,
+        smartSizing = true,
         onProgress,
         signal,
     } = params
@@ -490,14 +497,19 @@ export async function runPassagePipeline(params: {
         const { insertMultiplePicturesIntoHwp } = await import(
             "@/lib/hwp-utils"
         )
-        const insertions = results.map((r) => ({
-            sectionIdx: r.passage.sectionIdx,
-            paraIdx: r.passage.insertAfterParaIdx,
-            pngBytes: r.pngBytes,
-            displayWidthPx,
-            displayHeightPx,
-            description: `Diagram for Q${r.passage.questionNumber} (${r.passage.questionType})`,
-        }))
+        const insertions = results.map((r) => {
+            const preset = getDiagramSizePreset(r.passage.questionType)
+            const widthPx = smartSizing ? preset.widthPx : displayWidthPx
+            const heightPx = smartSizing ? preset.heightPx : displayHeightPx
+            return {
+                sectionIdx: r.passage.sectionIdx,
+                paraIdx: r.passage.insertAfterParaIdx,
+                pngBytes: r.pngBytes,
+                displayWidthPx: widthPx,
+                displayHeightPx: heightPx,
+                description: `Diagram for Q${r.passage.questionNumber} (${r.passage.questionType})`,
+            }
+        })
         const hwpBytes = await insertMultiplePicturesIntoHwp(
             hwpFile,
             insertions,
@@ -521,7 +533,7 @@ export async function runPassagePipeline(params: {
  */
 export function buildDrawioShareUrl(
     xml: string,
-    baseUrl = "https://viewer.diagrams.net",
+    baseUrl = getDrawioOpenUrlBase(),
 ): string {
     const fullXml = wrapWithMxFile(xml)
     return `${baseUrl}/?highlight=0000ff&edit=_blank&nav=1#R${encodeURIComponent(fullXml)}`

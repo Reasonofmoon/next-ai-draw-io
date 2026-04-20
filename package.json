@@ -6,6 +6,7 @@
     "main": "dist-electron/main/index.js",
     "scripts": {
         "dev": "next dev --turbopack --port 6002",
+        "demo:hwp": "powershell -ExecutionPolicy Bypass -File scripts/demo-hwp-batch.ps1",
         "build": "next build",
         "start": "next start --port 6001",
         "lint": "biome lint .",

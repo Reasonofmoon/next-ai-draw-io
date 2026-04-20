@@ -7,6 +7,7 @@ import { DictionaryProvider } from "@/hooks/use-dictionary"
 import type { Locale } from "@/lib/i18n/config"
 import { i18n } from "@/lib/i18n/config"
 import { getDictionary, hasLocale } from "@/lib/i18n/dictionaries"
+import { getSiteOrigin, getSiteUrl } from "@/lib/site-url"
 
 import "../globals.css"
 
@@ -61,6 +62,8 @@ export async function generateMetadata({
             "使用 AI 建立 AWS 架構圖、流程圖和技術圖表。免費線上工具整合 draw.io 與 AI 輔助，輕鬆建立專業圖表。",
     }
 
+    const siteOrigin = getSiteOrigin()
+
     return {
         title: titles[lang],
         description: descriptions[lang],
@@ -78,12 +81,12 @@ export async function generateMetadata({
         authors: [{ name: "Next AI Draw.io" }],
         creator: "Next AI Draw.io",
         publisher: "Next AI Draw.io",
-        metadataBase: new URL("https://next-ai-drawio.jiang.jp"),
+        metadataBase: new URL(siteOrigin),
         openGraph: {
             title: titles[lang],
             description: descriptions[lang],
             type: "website",
-            url: "https://next-ai-drawio.jiang.jp",
+            url: getSiteUrl(`/${lang}`),
             siteName: "Next AI Draw.io",
             locale:
                 lang === "zh"
@@ -124,10 +127,10 @@ export async function generateMetadata({
         },
         alternates: {
             languages: {
-                en: "/en",
-                zh: "/zh",
-                ja: "/ja",
-                "zh-Hant": "/zh-Hant",
+                en: getSiteUrl("/en"),
+                zh: getSiteUrl("/zh"),
+                ja: getSiteUrl("/ja"),
+                "zh-Hant": getSiteUrl("/zh-Hant"),
             },
         },
     }
@@ -153,7 +156,7 @@ export default async function RootLayout({
         operatingSystem: "Web Browser",
         description:
             "AI-powered diagram generator with targeted XML editing capabilities that integrates with draw.io for creating AWS architecture diagrams, flowcharts, and technical diagrams. Features diagram history, multi-provider AI support, and real-time collaboration.",
-        url: "https://next-ai-drawio.jiang.jp",
+        url: getSiteUrl(`/${validLang}`),
         inLanguage: validLang,
         offers: {
             "@type": "Offer",

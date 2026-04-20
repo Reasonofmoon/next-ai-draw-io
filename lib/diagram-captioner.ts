@@ -11,6 +11,8 @@
  *   └─────────────────────────────────────────┘
  */
 
+import { getDiagramTheme } from "@/lib/diagram-presets"
+
 export interface CaptionOptions {
     questionNumber: number | string
     questionType: string
@@ -39,14 +41,19 @@ export async function composeDiagramWithCaption(
     const {
         questionNumber,
         questionType,
-        subtitle = "AI 구조 다이어그램",
-        headerBg = "#1D4ED8",
-        headerFg = "#FFFFFF",
-        borderColor = "#1D4ED8",
+        subtitle,
+        headerBg,
+        headerFg,
+        borderColor,
         paddingX = 12,
         paddingY = 12,
         headerHeight = 44,
     } = options
+    const theme = getDiagramTheme(questionType)
+    const resolvedSubtitle = subtitle ?? theme.subtitle
+    const resolvedHeaderBg = headerBg ?? theme.headerBg
+    const resolvedHeaderFg = headerFg ?? theme.headerFg
+    const resolvedBorderColor = borderColor ?? theme.borderColor
 
     // Decode diagram image
     const blob = new Blob([diagramPngBytes.buffer as ArrayBuffer], {
@@ -65,16 +72,20 @@ export async function composeDiagramWithCaption(
     const ctx = canvas.getContext("2d")
     if (!ctx) throw new Error("2D canvas context unavailable")
 
-    // White background
+    // Card background
     ctx.fillStyle = "#FFFFFF"
     ctx.fillRect(0, 0, canvasW, canvasH)
 
+    // Soft body tint for a more presentation-ready card
+    ctx.fillStyle = theme.accentBg
+    ctx.fillRect(0, headerHeight, canvasW, canvasH - headerHeight)
+
     // Header bar
-    ctx.fillStyle = headerBg
+    ctx.fillStyle = resolvedHeaderBg
     ctx.fillRect(0, 0, canvasW, headerHeight)
 
     // Header text: "Q{N} · {type}"
-    ctx.fillStyle = headerFg
+    ctx.fillStyle = resolvedHeaderFg
     ctx.font =
         "bold 18px 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif"
     ctx.textBaseline = "middle"
@@ -86,14 +97,14 @@ export async function composeDiagramWithCaption(
     ctx.font =
         "500 13px 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif"
     ctx.textAlign = "right"
-    ctx.fillText(subtitle, canvasW - paddingX, headerHeight / 2)
+    ctx.fillText(resolvedSubtitle, canvasW - paddingX, headerHeight / 2)
 
     // Diagram image
     ctx.drawImage(bitmap, paddingX, headerHeight + paddingY, diagramW, diagramH)
     bitmap.close()
 
     // Border around the whole card
-    ctx.strokeStyle = borderColor
+    ctx.strokeStyle = resolvedBorderColor
     ctx.lineWidth = 2
     ctx.strokeRect(1, 1, canvasW - 2, canvasH - 2)
 
