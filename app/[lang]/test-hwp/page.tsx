@@ -1,6 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { stylePresetToReactCss } from "@/lib/hwp-format-rules"
+import { TEMPLATE_IDS, TEMPLATES, type TemplateId } from "@/lib/hwp-templates"
+import type { ContentBlock } from "@/lib/korean-content-generator"
 
 export default function TestHwpPage() {
     const [status, setStatus] = useState("Ready. Select a HWP file.")
@@ -37,6 +40,22 @@ export default function TestHwpPage() {
     const [passageResults, setPassageResults] = useState<
         Map<number, { xml: string; pngDataUrl: string; shareUrl: string }>
     >(new Map())
+
+    // ─── Phase 1b: Korean content pipeline ───────────────────────────────
+    const [contentPrompt, setContentPrompt] = useState(
+        "한글 해석 + 핵심 어휘 6개 + 정답·오답 해설 + 배경지식 1문단",
+    )
+    const [templateId, setTemplateId] = useState<TemplateId>("answer-1col")
+    const [contentByPassage, setContentByPassage] = useState<
+        Map<number, ContentBlock[]>
+    >(new Map())
+    const [contentGenerating, setContentGenerating] = useState(false)
+    const [contentProgress, setContentProgress] = useState<{
+        current: number
+        total: number
+        stage: string
+        failures: number
+    }>({ current: 0, total: 0, stage: "", failures: 0 })
 
     const [manualText, setManualText] = useState(
         "Traditional economic theory assumed that rational actors maximize utility. However, behavioral economists have shown that humans systematically deviate from this rationality. Tversky and Kahneman demonstrated how cognitive biases like loss aversion and framing effects dominate decision-making. These findings suggest that economic models must incorporate psychological realism to predict real-world behavior.",
@@ -564,6 +583,86 @@ export default function TestHwpPage() {
             ...prev,
             `${new Date().toLocaleTimeString()} ${msg}`,
         ])
+    }
+
+    const handleGenerateKoreanContent = async () => {
+        if (passages.length === 0) {
+            setStatus(
+                "Error: 감지된 지문이 없습니다. 먼저 HWP 파일을 업로드하세요.",
+            )
+            return
+        }
+        if (contentPrompt.trim().length < 2) {
+            setStatus("Error: 콘텐츠 요청 프롬프트를 입력하세요.")
+            return
+        }
+
+        const tpl = TEMPLATES[templateId]
+        setContentGenerating(true)
+        setContentProgress({
+            current: 0,
+            total: passages.length,
+            stage: "starting",
+            failures: 0,
+        })
+        setContentByPassage(new Map())
+
+        log(
+            `=== Korean content pipeline start: ${passages.length} passages, template=${templateId} ===`,
+        )
+
+        const { generateKoreanContent } = await import(
+            "@/lib/korean-content-generator"
+        )
+
+        let failures = 0
+        for (let i = 0; i < passages.length; i++) {
+            const p = passages[i]
+            setContentProgress({
+                current: i,
+                total: passages.length,
+                stage: `Q${p.questionNumber}: 한글 콘텐츠 생성 중...`,
+                failures,
+            })
+
+            try {
+                const { blocks } = await generateKoreanContent({
+                    passage: {
+                        englishPassage: p.englishPassage,
+                        questionType: p.questionType,
+                        koreanInstruction: p.koreanInstruction,
+                        questionNumber: p.questionNumber,
+                    },
+                    userPrompt: contentPrompt.trim(),
+                    templateId: tpl.id,
+                    allowedBlockTypes: tpl.allowedBlockTypes,
+                })
+
+                setContentByPassage((prev) => {
+                    const next = new Map(prev)
+                    next.set(p.questionNumber, blocks)
+                    return next
+                })
+                log(
+                    `Q${p.questionNumber}: ${blocks.length} blocks (${blocks.map((b) => b.type).join(", ")})`,
+                )
+            } catch (err) {
+                failures += 1
+                const msg = err instanceof Error ? err.message : String(err)
+                log(`Q${p.questionNumber} FAILED: ${msg}`)
+            }
+        }
+
+        setContentProgress({
+            current: passages.length,
+            total: passages.length,
+            stage: failures > 0 ? `완료 (${failures}개 실패)` : "완료",
+            failures,
+        })
+        setContentGenerating(false)
+        setStatus(
+            `한글 콘텐츠 생성 완료: ${passages.length - failures}/${passages.length} 지문.`,
+        )
     }
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1567,6 +1666,305 @@ export default function TestHwpPage() {
                         )}
                     </section>
 
+                    {/* Phase 1b: Korean content pipeline */}
+                    <section
+                        style={{
+                            ...sectionCard,
+                            background: T.lavenderWash,
+                            border: `1px solid ${T.lavender}`,
+                        }}
+                    >
+                        <legend style={sectionLegend(T.lavender, -0.3)}>
+                            🧠 AI 한글 콘텐츠 생성
+                        </legend>
+                        <p style={hint}>
+                            프롬프트로 해설·어휘·요약·배경지식 등을 자유롭게
+                            요청하면 지문별로 일괄 생성됩니다. 어휘 블록은 항상
+                            다이어그램보다 먼저 만들어져 다이어그램 프롬프트의
+                            힌트로 쓰입니다.
+                        </p>
+
+                        <div
+                            style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 1fr",
+                                gap: 12,
+                                marginBottom: 12,
+                            }}
+                        >
+                            <div>
+                                <label
+                                    style={{
+                                        display: "block",
+                                        fontSize: 12,
+                                        color: T.ink700,
+                                        marginBottom: 4,
+                                    }}
+                                >
+                                    📐 템플릿
+                                </label>
+                                <select
+                                    value={templateId}
+                                    onChange={(e) =>
+                                        setTemplateId(
+                                            e.target.value as TemplateId,
+                                        )
+                                    }
+                                    disabled={contentGenerating}
+                                    style={{
+                                        ...inputBase,
+                                        width: "100%",
+                                        cursor: contentGenerating
+                                            ? "not-allowed"
+                                            : "pointer",
+                                    }}
+                                >
+                                    {TEMPLATE_IDS.map((id) => (
+                                        <option key={id} value={id}>
+                                            {TEMPLATES[id].name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <div
+                                    style={{
+                                        fontSize: 11,
+                                        color: T.ink500,
+                                        marginTop: 4,
+                                        lineHeight: 1.4,
+                                    }}
+                                >
+                                    {TEMPLATES[templateId].description}
+                                </div>
+                            </div>
+                            <div>
+                                <label
+                                    style={{
+                                        display: "block",
+                                        fontSize: 12,
+                                        color: T.ink700,
+                                        marginBottom: 4,
+                                    }}
+                                >
+                                    ✅ 허용 블록 타입
+                                </label>
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        flexWrap: "wrap",
+                                        gap: 4,
+                                    }}
+                                >
+                                    {TEMPLATES[
+                                        templateId
+                                    ].allowedBlockTypes.map((t) => (
+                                        <span
+                                            key={t}
+                                            style={{
+                                                fontSize: 11,
+                                                padding: "3px 8px",
+                                                borderRadius: 12,
+                                                background: T.paper100,
+                                                border: `1px solid ${T.paper300}`,
+                                                color: T.ink700,
+                                            }}
+                                        >
+                                            {t}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <label
+                            style={{
+                                display: "block",
+                                fontSize: 12,
+                                color: T.ink700,
+                                marginBottom: 4,
+                            }}
+                        >
+                            ✍️ 콘텐츠 요청 프롬프트
+                        </label>
+                        <textarea
+                            value={contentPrompt}
+                            onChange={(e) => setContentPrompt(e.target.value)}
+                            disabled={contentGenerating}
+                            rows={3}
+                            placeholder="예: 한글 해석 + 핵심 어휘 6개 + 오답 해설"
+                            style={{
+                                ...inputBase,
+                                width: "100%",
+                                resize: "vertical",
+                                marginBottom: 12,
+                            }}
+                        />
+
+                        <div
+                            style={{
+                                display: "flex",
+                                gap: 10,
+                                flexWrap: "wrap",
+                                alignItems: "center",
+                            }}
+                        >
+                            <button
+                                type="button"
+                                onClick={handleGenerateKoreanContent}
+                                disabled={
+                                    passages.length === 0 || contentGenerating
+                                }
+                                style={makeButton(
+                                    T.lavender,
+                                    "#fff",
+                                    passages.length === 0 || contentGenerating,
+                                )}
+                            >
+                                {contentGenerating
+                                    ? `진행 중 ${contentProgress.current}/${contentProgress.total}`
+                                    : `🧠 ${passages.length}개 지문 콘텐츠 생성`}
+                            </button>
+                            {contentByPassage.size > 0 &&
+                                !contentGenerating && (
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setContentByPassage(new Map())
+                                        }
+                                        style={makeButton(
+                                            T.paper300,
+                                            T.ink700,
+                                            false,
+                                        )}
+                                    >
+                                        🧹 결과 초기화
+                                    </button>
+                                )}
+                            <span
+                                style={{
+                                    fontSize: 12,
+                                    color: T.ink500,
+                                }}
+                            >
+                                생성됨: {contentByPassage.size}/
+                                {passages.length}
+                            </span>
+                        </div>
+
+                        {contentGenerating && (
+                            <div style={{ marginTop: 14 }}>
+                                <div
+                                    style={{
+                                        background: T.paper300,
+                                        height: 10,
+                                        borderRadius: 10,
+                                        overflow: "hidden",
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            background: T.lavender,
+                                            height: "100%",
+                                            width: `${(contentProgress.current / Math.max(1, contentProgress.total)) * 100}%`,
+                                            transition: "width 0.3s",
+                                        }}
+                                    />
+                                </div>
+                                <div
+                                    style={{
+                                        marginTop: 6,
+                                        fontSize: 12,
+                                        color: T.ink700,
+                                    }}
+                                >
+                                    {contentProgress.stage}
+                                    {contentProgress.failures > 0 && (
+                                        <span
+                                            style={{
+                                                color: T.coral,
+                                                marginLeft: 10,
+                                                fontWeight: 600,
+                                            }}
+                                        >
+                                            · {contentProgress.failures}개 실패
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Phase 1b: Content preview panel */}
+                    {contentByPassage.size > 0 && (
+                        <section style={sectionCard}>
+                            <legend style={sectionLegend(T.inkBlue, 0.5)}>
+                                📖 한글 콘텐츠 미리보기 ({contentByPassage.size}
+                                )
+                            </legend>
+                            <p style={hint}>
+                                아래 미리보기는 선택된 스타일 프리셋을 웹에서
+                                근사하게 보여줍니다. 실제 HWP 글상자/표 렌더링은
+                                Phase 4에서 적용됩니다.
+                            </p>
+                            {passages.map((p) => {
+                                const blocks = contentByPassage.get(
+                                    p.questionNumber,
+                                )
+                                if (!blocks) return null
+                                return (
+                                    <details
+                                        key={p.questionNumber}
+                                        open
+                                        style={{
+                                            background: T.paper100,
+                                            border: `1px solid ${T.paper300}`,
+                                            borderRadius: 12,
+                                            padding: 14,
+                                            marginBottom: 12,
+                                        }}
+                                    >
+                                        <summary
+                                            style={{
+                                                cursor: "pointer",
+                                                fontWeight: 700,
+                                                color: T.ink900,
+                                                fontFamily: T.fontSans,
+                                            }}
+                                        >
+                                            Q{p.questionNumber} ·{" "}
+                                            {p.questionType}
+                                            <span
+                                                style={{
+                                                    color: T.ink500,
+                                                    fontWeight: 400,
+                                                    marginLeft: 8,
+                                                    fontSize: 12,
+                                                }}
+                                            >
+                                                ({blocks.length} blocks)
+                                            </span>
+                                        </summary>
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                gap: 10,
+                                                marginTop: 12,
+                                            }}
+                                        >
+                                            {blocks.map((block, idx) => (
+                                                <BlockPreview
+                                                    key={`${p.questionNumber}-${idx}`}
+                                                    block={block}
+                                                    theme={T}
+                                                />
+                                            ))}
+                                        </div>
+                                    </details>
+                                )
+                            })}
+                        </section>
+                    )}
+
                     {/* Debug log */}
                     <details
                         style={{
@@ -2023,6 +2421,175 @@ export default function TestHwpPage() {
 }
 
 // ===== helpers =====
+
+/**
+ * Per-block preview card. Uses stylePresetToReactCss() to approximate the
+ * final HWP rendering inside the browser. Vocabulary blocks render as a
+ * real <table>; everything else renders as a styled paragraph block.
+ */
+function BlockPreview({
+    block,
+    theme,
+}: {
+    block: ContentBlock
+    theme: {
+        paper50: string
+        paper100: string
+        paper300: string
+        ink500: string
+        ink700: string
+        ink900: string
+        fontSans: string
+    }
+}) {
+    const headingStyle = stylePresetToReactCss("heading-accent")
+    const bodyStyle = stylePresetToReactCss(block.stylePreset)
+
+    return (
+        <div
+            style={{
+                background: theme.paper50,
+                border: `1px solid ${theme.paper300}`,
+                borderRadius: 10,
+                padding: 12,
+                fontFamily: theme.fontSans,
+            }}
+        >
+            <div
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 10,
+                }}
+            >
+                <div
+                    style={{
+                        ...headingStyle,
+                        display: "inline-block",
+                        padding: "4px 12px",
+                        fontSize: "10.5pt",
+                        borderRadius: 6,
+                    }}
+                >
+                    {block.title}
+                </div>
+                <div
+                    style={{
+                        fontSize: 10,
+                        color: theme.ink500,
+                        fontFamily: "monospace",
+                    }}
+                >
+                    {block.type} · {block.stylePreset} · {block.renderAs}
+                </div>
+            </div>
+
+            {block.renderAs === "table" && block.vocabEntries ? (
+                <table
+                    style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        fontSize: "10.5pt",
+                        color: theme.ink900,
+                    }}
+                >
+                    <thead>
+                        <tr>
+                            <th
+                                style={{
+                                    ...headingStyle,
+                                    textAlign: "left",
+                                    padding: "6px 10px",
+                                    fontSize: "10.5pt",
+                                }}
+                            >
+                                단어
+                            </th>
+                            <th
+                                style={{
+                                    ...headingStyle,
+                                    textAlign: "left",
+                                    padding: "6px 10px",
+                                    fontSize: "10.5pt",
+                                }}
+                            >
+                                뜻
+                            </th>
+                            <th
+                                style={{
+                                    ...headingStyle,
+                                    textAlign: "left",
+                                    padding: "6px 10px",
+                                    fontSize: "10.5pt",
+                                }}
+                            >
+                                예문
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {block.vocabEntries.map((v, i) => (
+                            <tr
+                                key={`${v.word}-${i}`}
+                                style={{
+                                    background:
+                                        i % 2 === 0
+                                            ? theme.paper50
+                                            : theme.paper100,
+                                }}
+                            >
+                                <td
+                                    style={{
+                                        padding: "6px 10px",
+                                        fontWeight: 600,
+                                        verticalAlign: "top",
+                                    }}
+                                >
+                                    {v.word}
+                                </td>
+                                <td
+                                    style={{
+                                        padding: "6px 10px",
+                                        verticalAlign: "top",
+                                    }}
+                                >
+                                    {v.meaning}
+                                </td>
+                                <td
+                                    style={{
+                                        padding: "6px 10px",
+                                        verticalAlign: "top",
+                                        color: theme.ink700,
+                                        fontStyle: "italic",
+                                    }}
+                                >
+                                    {v.example ?? ""}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            ) : (
+                <div style={bodyStyle}>{block.textContent}</div>
+            )}
+
+            {block.reasoning && (
+                <div
+                    style={{
+                        marginTop: 8,
+                        fontSize: 11,
+                        color: theme.ink500,
+                        fontStyle: "italic",
+                    }}
+                >
+                    💡 {block.reasoning}
+                </div>
+            )}
+        </div>
+    )
+}
+
 function colorForType(
     type: string,
     T: {
