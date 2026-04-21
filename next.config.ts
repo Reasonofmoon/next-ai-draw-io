@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
     outputFileTracingIncludes: {
         "*": ["./instrumentation.ts"],
     },
+    // kordoc is ESM with `import.meta.url` + dynamic pdfjs-dist imports.
+    // Leaving it as an external prevents the bundler from tracing it and
+    // lets Node resolve it at runtime (the API routes already dynamic-
+    // import it, so this is purely about keeping the bundler hands-off).
+    serverExternalPackages: ["kordoc", "pdfjs-dist"],
 }
 
 export default nextConfig

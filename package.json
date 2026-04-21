@@ -82,6 +82,7 @@
         "next": "^16.0.7",
         "ollama-ai-provider-v2": "^2.0.0",
         "pako": "^2.1.0",
+        "pdfjs-dist": "^5.6.205",
         "prism-react-renderer": "^2.4.1",
         "react": "^19.1.2",
         "react-dom": "^19.1.2",
