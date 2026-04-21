@@ -4,6 +4,14 @@
             "memory": 512,
             "maxDuration": 120
         },
+        "app/api/parse-hwp-markdown/route.ts": {
+            "memory": 1024,
+            "maxDuration": 60
+        },
+        "app/api/markdown-to-hwpx/route.ts": {
+            "memory": 1024,
+            "maxDuration": 60
+        },
         "app/api/**/route.ts": {
             "memory": 256,
             "maxDuration": 10
