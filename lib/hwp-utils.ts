@@ -233,17 +233,56 @@ function detectQuestionType(koreanInstruction: string): string {
  * Hybrid detection: try regex first, fall back to AI if regex result is weak.
  * Returns detected passages + which method produced them (for UI feedback).
  */
+/**
+ * Minimal duck-typed kordoc block shape — we only read `.type` and `.text`
+ * here. The full IRBlock union lives in `lib/kordoc-adapter.ts`.
+ */
+export interface KordocHintBlock {
+    type: string
+    text?: string
+}
+
+/**
+ * Mine the set of question numbers that kordoc's structured output suggests
+ * are present in the document. We treat any heading/paragraph/list-item
+ * whose text starts with "N." or "N " (N = 1..60) as a question marker.
+ */
+function extractQuestionNumbersFromKordoc(
+    blocks: KordocHintBlock[] | undefined,
+): Set<number> {
+    const set = new Set<number>()
+    if (!blocks) return set
+    for (const b of blocks) {
+        const t = (b.text ?? "").trim()
+        if (!t) continue
+        const m = t.match(/^(\d{1,2})[.\s)]/)
+        if (m) {
+            const n = Number.parseInt(m[1], 10)
+            if (n >= 1 && n <= 60) set.add(n)
+        }
+    }
+    return set
+}
+
 export async function detectPassagesHybrid(
     paragraphs: HwpParagraph[],
     options: {
         signal?: AbortSignal
-        onStageChange?: (stage: "regex" | "ai" | "done") => void
+        onStageChange?: (stage: "regex" | "ai" | "kordoc" | "done") => void
+        /**
+         * Optional structured blocks from kordoc (lib/kordoc-adapter.ts).
+         * When provided, the detector uses them as a third opinion —
+         * (a) if regex agrees with kordoc we skip AI, (b) if regex and
+         * kordoc disagree we always run AI.
+         */
+        kordocBlocks?: KordocHintBlock[]
     } = {},
 ): Promise<{
     passages: DetectedPassage[]
-    method: "regex" | "ai" | "regex+ai"
+    method: "regex" | "ai" | "regex+ai" | "regex+kordoc" | "regex+ai+kordoc"
     regexCount: number
     aiCount: number
+    kordocCount: number
 }> {
     options.onStageChange?.("regex")
     const regexResult = detectPassagesFromParagraphs(paragraphs)
@@ -252,13 +291,36 @@ export async function detectPassagesHybrid(
         "@/lib/passage-detection-ai"
     )
 
-    if (isRegexResultGoodEnough(regexResult, paragraphs)) {
+    const kordocQNums = extractQuestionNumbersFromKordoc(options.kordocBlocks)
+    const regexQNums = new Set(regexResult.map((p) => p.questionNumber))
+
+    // kordoc-assisted fast-path: if regex covers every question kordoc saw,
+    // we have two independent sources agreeing — no need for AI.
+    const regexCoversKordoc =
+        kordocQNums.size > 0 && [...kordocQNums].every((n) => regexQNums.has(n))
+
+    if (regexCoversKordoc) {
+        options.onStageChange?.("done")
+        return {
+            passages: regexResult,
+            method: "regex+kordoc",
+            regexCount: regexResult.length,
+            aiCount: 0,
+            kordocCount: kordocQNums.size,
+        }
+    }
+
+    if (
+        isRegexResultGoodEnough(regexResult, paragraphs) &&
+        kordocQNums.size === 0
+    ) {
         options.onStageChange?.("done")
         return {
             passages: regexResult,
             method: "regex",
             regexCount: regexResult.length,
             aiCount: 0,
+            kordocCount: 0,
         }
     }
 
@@ -273,16 +335,22 @@ export async function detectPassagesHybrid(
         if (aiResult.length === 0 && regexResult.length > 0) {
             return {
                 passages: regexResult,
-                method: "regex",
+                method: kordocQNums.size > 0 ? "regex+kordoc" : "regex",
                 regexCount: regexResult.length,
                 aiCount: 0,
+                kordocCount: kordocQNums.size,
             }
         }
+        const baseMethod = regexResult.length > 0 ? "regex+ai" : ("ai" as const)
         return {
             passages: aiResult,
-            method: regexResult.length > 0 ? "regex+ai" : "ai",
+            method:
+                kordocQNums.size > 0 && baseMethod === "regex+ai"
+                    ? "regex+ai+kordoc"
+                    : baseMethod,
             regexCount: regexResult.length,
             aiCount: aiResult.length,
+            kordocCount: kordocQNums.size,
         }
     } catch (err) {
         console.error("[hwp-utils] AI detection fallback failed:", err)
@@ -290,9 +358,10 @@ export async function detectPassagesHybrid(
         // AI failed — fall back to whatever regex got
         return {
             passages: regexResult,
-            method: "regex",
+            method: kordocQNums.size > 0 ? "regex+kordoc" : "regex",
             regexCount: regexResult.length,
             aiCount: 0,
+            kordocCount: kordocQNums.size,
         }
     }
 }
