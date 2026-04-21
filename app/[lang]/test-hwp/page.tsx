@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { stylePresetToReactCss } from "@/lib/hwp-format-rules"
 import { TEMPLATE_IDS, TEMPLATES, type TemplateId } from "@/lib/hwp-templates"
 import type { ContentBlock } from "@/lib/korean-content-generator"
@@ -40,6 +40,38 @@ export default function TestHwpPage() {
     const [passageResults, setPassageResults] = useState<
         Map<number, { xml: string; pngDataUrl: string; shareUrl: string }>
     >(new Map())
+
+    // ─── Per-passage selection (shared by pipeline + korean content) ──────
+    const [selectedQuestionNumbers, setSelectedQuestionNumbers] = useState<
+        Set<number>
+    >(new Set())
+    // Whenever the detected passages list changes, default to "all selected".
+    useEffect(() => {
+        setSelectedQuestionNumbers(
+            new Set(passages.map((p) => p.questionNumber)),
+        )
+    }, [passages])
+    const selectedCount = selectedQuestionNumbers.size
+    const selectedPassages = useMemo(
+        () =>
+            passages.filter((p) =>
+                selectedQuestionNumbers.has(p.questionNumber),
+            ),
+        [passages, selectedQuestionNumbers],
+    )
+    const togglePassageSelected = (qNum: number) => {
+        setSelectedQuestionNumbers((prev) => {
+            const next = new Set(prev)
+            if (next.has(qNum)) next.delete(qNum)
+            else next.add(qNum)
+            return next
+        })
+    }
+    const selectAllPassages = () =>
+        setSelectedQuestionNumbers(
+            new Set(passages.map((p) => p.questionNumber)),
+        )
+    const deselectAllPassages = () => setSelectedQuestionNumbers(new Set())
 
     // ─── Phase 1b: Korean content pipeline ───────────────────────────────
     const [contentPrompt, setContentPrompt] = useState(
@@ -357,16 +389,24 @@ export default function TestHwpPage() {
             )
             return
         }
+        if (selectedPassages.length === 0) {
+            setStatus(
+                "Error: 선택된 지문이 없습니다. 지문 카드에서 최소 1개 이상 선택하세요.",
+            )
+            return
+        }
 
         setPipelineRunning(true)
         setPassageResults(new Map())
         setPipelineProgress({
             current: 0,
-            total: passages.length,
+            total: selectedPassages.length,
             stage: "starting",
             failures: 0,
         })
-        log(`=== Starting full pipeline for ${passages.length} passages ===`)
+        log(
+            `=== Starting full pipeline for ${selectedPassages.length}/${passages.length} selected passages ===`,
+        )
 
         try {
             const { runPassagePipeline, buildDrawioShareUrl } = await import(
@@ -376,7 +416,7 @@ export default function TestHwpPage() {
 
             const result = await runPassagePipeline({
                 hwpFile,
-                passages,
+                passages: selectedPassages,
                 displayWidthPx: widthPx,
                 displayHeightPx: heightPx,
                 onProgress: (p) => {
@@ -427,8 +467,8 @@ export default function TestHwpPage() {
                     } else if (p.stage === "inserting") {
                         log(`Inserting ${p.total} diagrams into HWP...`)
                         setPipelineProgress({
-                            current: passages.length,
-                            total: passages.length,
+                            current: selectedPassages.length,
+                            total: selectedPassages.length,
                             stage: "Inserting into HWP",
                             failures,
                         })
@@ -451,7 +491,7 @@ export default function TestHwpPage() {
             a.click()
             URL.revokeObjectURL(url)
             setStatus(
-                `Pipeline complete: ${result.results.length}/${passages.length} passages diagrammed. HWP downloaded.`,
+                `Pipeline complete: ${result.results.length}/${selectedPassages.length} passages diagrammed. HWP downloaded.`,
             )
         } catch (err) {
             const errMsg =
@@ -592,6 +632,12 @@ export default function TestHwpPage() {
             )
             return
         }
+        if (selectedPassages.length === 0) {
+            setStatus(
+                "Error: 선택된 지문이 없습니다. 지문 카드에서 최소 1개 이상 선택하세요.",
+            )
+            return
+        }
         if (contentPrompt.trim().length < 2) {
             setStatus("Error: 콘텐츠 요청 프롬프트를 입력하세요.")
             return
@@ -601,14 +647,14 @@ export default function TestHwpPage() {
         setContentGenerating(true)
         setContentProgress({
             current: 0,
-            total: passages.length,
+            total: selectedPassages.length,
             stage: "starting",
             failures: 0,
         })
         setContentByPassage(new Map())
 
         log(
-            `=== Korean content pipeline start: ${passages.length} passages, template=${templateId} ===`,
+            `=== Korean content pipeline start: ${selectedPassages.length}/${passages.length} selected passages, template=${templateId} ===`,
         )
 
         const { generateKoreanContent } = await import(
@@ -616,11 +662,11 @@ export default function TestHwpPage() {
         )
 
         let failures = 0
-        for (let i = 0; i < passages.length; i++) {
-            const p = passages[i]
+        for (let i = 0; i < selectedPassages.length; i++) {
+            const p = selectedPassages[i]
             setContentProgress({
                 current: i,
-                total: passages.length,
+                total: selectedPassages.length,
                 stage: `Q${p.questionNumber}: 한글 콘텐츠 생성 중...`,
                 failures,
             })
@@ -654,14 +700,14 @@ export default function TestHwpPage() {
         }
 
         setContentProgress({
-            current: passages.length,
-            total: passages.length,
+            current: selectedPassages.length,
+            total: selectedPassages.length,
             stage: failures > 0 ? `완료 (${failures}개 실패)` : "완료",
             failures,
         })
         setContentGenerating(false)
         setStatus(
-            `한글 콘텐츠 생성 완료: ${passages.length - failures}/${passages.length} 지문.`,
+            `한글 콘텐츠 생성 완료: ${selectedPassages.length - failures}/${selectedPassages.length} 지문.`,
         )
     }
 
@@ -1590,7 +1636,7 @@ export default function TestHwpPage() {
                                 onClick={handleRunFullPipeline}
                                 disabled={
                                     !hwpFile ||
-                                    passages.length === 0 ||
+                                    selectedCount === 0 ||
                                     pipelineRunning ||
                                     inserting
                                 }
@@ -1598,14 +1644,16 @@ export default function TestHwpPage() {
                                     T.sage,
                                     "#fff",
                                     !hwpFile ||
-                                        passages.length === 0 ||
+                                        selectedCount === 0 ||
                                         pipelineRunning ||
                                         inserting,
                                 )}
                             >
                                 {pipelineRunning
                                     ? `진행 중 ${pipelineProgress.current}/${pipelineProgress.total}`
-                                    : `🚀 ${passages.length}개 지문 파이프라인 실행`}
+                                    : selectedCount === passages.length
+                                      ? `🚀 전체 ${passages.length}개 지문 파이프라인 실행`
+                                      : `🚀 선택 ${selectedCount}/${passages.length}개 지문 파이프라인 실행`}
                             </button>
                             <button
                                 type="button"
@@ -1811,17 +1859,19 @@ export default function TestHwpPage() {
                                 type="button"
                                 onClick={handleGenerateKoreanContent}
                                 disabled={
-                                    passages.length === 0 || contentGenerating
+                                    selectedCount === 0 || contentGenerating
                                 }
                                 style={makeButton(
                                     T.lavender,
                                     "#fff",
-                                    passages.length === 0 || contentGenerating,
+                                    selectedCount === 0 || contentGenerating,
                                 )}
                             >
                                 {contentGenerating
                                     ? `진행 중 ${contentProgress.current}/${contentProgress.total}`
-                                    : `🧠 ${passages.length}개 지문 콘텐츠 생성`}
+                                    : selectedCount === passages.length
+                                      ? `🧠 전체 ${passages.length}개 지문 콘텐츠 생성`
+                                      : `🧠 선택 ${selectedCount}/${passages.length}개 지문 콘텐츠 생성`}
                             </button>
                             {contentByPassage.size > 0 &&
                                 !contentGenerating && (
@@ -2129,12 +2179,95 @@ export default function TestHwpPage() {
                                 style={{
                                     fontSize: 14,
                                     color: T.ink500,
-                                    marginBottom: 20,
+                                    marginBottom: 12,
                                 }}
                             >
                                 카드의 <em>"삽입 위치 지정"</em>을 누르면 상단
                                 Section/Paragraph가 자동 업데이트됩니다.
+                                체크박스로 원하는 지문만 골라 파이프라인 / 한글
+                                콘텐츠 생성을 돌릴 수 있습니다.
                             </p>
+                            {/* Selection toolbar */}
+                            <div
+                                style={{
+                                    display: "flex",
+                                    gap: 8,
+                                    alignItems: "center",
+                                    flexWrap: "wrap",
+                                    marginBottom: 16,
+                                    padding: "8px 14px",
+                                    background: T.paper100,
+                                    border: `1px solid ${T.paper300}`,
+                                    borderRadius: 10,
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        fontSize: 13,
+                                        color: T.ink700,
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    선택: {selectedCount}/{passages.length}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={selectAllPassages}
+                                    disabled={selectedCount === passages.length}
+                                    style={{
+                                        ...makeButton(
+                                            T.sage,
+                                            "#fff",
+                                            selectedCount === passages.length,
+                                        ),
+                                        padding: "6px 12px",
+                                        fontSize: 12,
+                                    }}
+                                >
+                                    ☑ 전체 선택
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={deselectAllPassages}
+                                    disabled={selectedCount === 0}
+                                    style={{
+                                        ...makeButton(
+                                            T.coral,
+                                            "#fff",
+                                            selectedCount === 0,
+                                        ),
+                                        padding: "6px 12px",
+                                        fontSize: 12,
+                                    }}
+                                >
+                                    ☐ 전체 해제
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        // Invert selection
+                                        setSelectedQuestionNumbers((prev) => {
+                                            const next = new Set<number>()
+                                            for (const p of passages) {
+                                                if (!prev.has(p.questionNumber))
+                                                    next.add(p.questionNumber)
+                                            }
+                                            return next
+                                        })
+                                    }}
+                                    style={{
+                                        ...makeButton(
+                                            T.lavender,
+                                            "#fff",
+                                            false,
+                                        ),
+                                        padding: "6px 12px",
+                                        fontSize: 12,
+                                    }}
+                                >
+                                    🔁 반전
+                                </button>
+                            </div>
                             <div
                                 style={{
                                     display: "flex",
@@ -2153,6 +2286,10 @@ export default function TestHwpPage() {
                                             : idx % 3 === 1
                                               ? 0.2
                                               : -0.1
+                                    const isSelected =
+                                        selectedQuestionNumbers.has(
+                                            p.questionNumber,
+                                        )
                                     return (
                                         <article
                                             key={p.questionNumber}
@@ -2165,6 +2302,12 @@ export default function TestHwpPage() {
                                                 borderLeftWidth: 6,
                                                 boxShadow: T.shadowSoft,
                                                 transform: `rotate(${rotation}deg)`,
+                                                opacity: isSelected ? 1 : 0.45,
+                                                transition:
+                                                    "opacity 200ms, filter 200ms",
+                                                filter: isSelected
+                                                    ? "none"
+                                                    : "grayscale(0.6)",
                                             }}
                                         >
                                             <div
@@ -2177,35 +2320,75 @@ export default function TestHwpPage() {
                                                     flexWrap: "wrap",
                                                 }}
                                             >
-                                                <div>
-                                                    <div
+                                                <div
+                                                    style={{
+                                                        display: "flex",
+                                                        alignItems:
+                                                            "flex-start",
+                                                        gap: 12,
+                                                    }}
+                                                >
+                                                    <label
                                                         style={{
-                                                            display:
-                                                                "inline-block",
-                                                            fontSize: 11,
-                                                            letterSpacing:
-                                                                "0.1em",
-                                                            textTransform:
-                                                                "uppercase",
-                                                            color: typeColor,
-                                                            fontWeight: 700,
-                                                            marginBottom: 4,
+                                                            display: "flex",
+                                                            alignItems:
+                                                                "center",
+                                                            cursor: "pointer",
+                                                            paddingTop: 4,
                                                         }}
+                                                        title={
+                                                            isSelected
+                                                                ? "선택 해제"
+                                                                : "선택"
+                                                        }
                                                     >
-                                                        {p.questionType}
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSelected}
+                                                            onChange={() =>
+                                                                togglePassageSelected(
+                                                                    p.questionNumber,
+                                                                )
+                                                            }
+                                                            style={{
+                                                                width: 20,
+                                                                height: 20,
+                                                                accentColor:
+                                                                    typeColor,
+                                                                cursor: "pointer",
+                                                            }}
+                                                        />
+                                                    </label>
+                                                    <div>
+                                                        <div
+                                                            style={{
+                                                                display:
+                                                                    "inline-block",
+                                                                fontSize: 11,
+                                                                letterSpacing:
+                                                                    "0.1em",
+                                                                textTransform:
+                                                                    "uppercase",
+                                                                color: typeColor,
+                                                                fontWeight: 700,
+                                                                marginBottom: 4,
+                                                            }}
+                                                        >
+                                                            {p.questionType}
+                                                        </div>
+                                                        <h3
+                                                            style={{
+                                                                margin: 0,
+                                                                fontSize: 22,
+                                                                fontWeight: 700,
+                                                                color: T.ink900,
+                                                                fontFamily:
+                                                                    T.fontSans,
+                                                            }}
+                                                        >
+                                                            Q{p.questionNumber}
+                                                        </h3>
                                                     </div>
-                                                    <h3
-                                                        style={{
-                                                            margin: 0,
-                                                            fontSize: 22,
-                                                            fontWeight: 700,
-                                                            color: T.ink900,
-                                                            fontFamily:
-                                                                T.fontSans,
-                                                        }}
-                                                    >
-                                                        Q{p.questionNumber}
-                                                    </h3>
                                                 </div>
                                                 <div
                                                     style={{
