@@ -87,9 +87,14 @@ export async function POST(
 
     try {
         const fileBytes = await file.arrayBuffer()
+        const requestOrigin = new URL(req.url).origin
         const converted =
             process.env.VERCEL === "1" && process.env.VERCEL_URL
-                ? await convertWithVercelPythonFunction(fileBytes, filename)
+                ? await convertWithVercelPythonFunction(
+                      fileBytes,
+                      filename,
+                      requestOrigin,
+                  )
                 : await convertWithLocalPython(fileBytes)
 
         const markdown = converted.markdown.trim()
@@ -137,6 +142,7 @@ export async function POST(
 async function convertWithVercelPythonFunction(
     fileBytes: ArrayBuffer,
     filename: string,
+    origin: string,
 ): Promise<{
     markdown: string
     engine: string
@@ -148,13 +154,10 @@ async function convertWithVercelPythonFunction(
         new Blob([fileBytes], { type: "application/pdf" }),
         filename,
     )
-    const res = await fetch(
-        `https://${process.env.VERCEL_URL}/api/markitdown_python`,
-        {
-            method: "POST",
-            body: formData,
-        },
-    )
+    const res = await fetch(`${origin}/api/markitdown_python`, {
+        method: "POST",
+        body: formData,
+    })
     const data = (await res.json().catch(() => null)) as {
         success?: boolean
         markdown?: string
