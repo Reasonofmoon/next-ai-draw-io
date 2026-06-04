@@ -56,6 +56,14 @@ interface ConvertedInput {
     warnings: string[]
 }
 
+interface AiDetectedPassage {
+    number: number
+    type: string
+    koreanInstruction: string
+    englishText: string
+    confidence: "high" | "medium" | "low"
+}
+
 const page = {
     minHeight: "100vh",
     background: "#F7F4EE",
@@ -999,12 +1007,150 @@ async function convertInputFile(file: File): Promise<ConvertedInput> {
 
     const converted = await convertPdfToMarkdown(file)
     const split = splitPdfMarkdownIntoSections(converted.markdown, file.name)
+    const refined = await refinePdfQuestionsIfNeeded(
+        converted.markdown,
+        file.name,
+        split,
+    )
     return {
         markdown: converted.markdown,
-        engine: converted.engine,
-        sections: split.sections,
-        warnings: split.warnings,
+        engine: refined.usedAi
+            ? `${converted.engine} + ai-question-detector`
+            : converted.engine,
+        sections: refined.sections,
+        warnings: refined.warnings,
     }
+}
+
+async function refinePdfQuestionsIfNeeded(
+    markdown: string,
+    filename: string,
+    split: {
+        sections: PdfMarkdownSection[]
+        warnings: string[]
+    },
+): Promise<{
+    usedAi: boolean
+    sections: PdfMarkdownSection[]
+    warnings: string[]
+}> {
+    if (!shouldUseAiQuestionDetector(markdown, split.sections)) {
+        return {
+            usedAi: false,
+            sections: split.sections,
+            warnings: split.warnings,
+        }
+    }
+
+    try {
+        const aiSections = await detectPdfQuestionsViaAI(markdown, filename)
+        if (
+            aiSections.length >= 8 &&
+            aiSections.length >= split.sections.length / 2
+        ) {
+            return {
+                usedAi: true,
+                sections: aiSections,
+                warnings: [
+                    `AI question detector replaced the initial ${split.sections.length} sections with ${aiSections.length} clean question passages.`,
+                    ...split.warnings,
+                ],
+            }
+        }
+
+        return {
+            usedAi: false,
+            sections: split.sections,
+            warnings: [
+                `AI question detector returned only ${aiSections.length} passages, so the initial split was kept.`,
+                ...split.warnings,
+            ],
+        }
+    } catch (err) {
+        return {
+            usedAi: false,
+            sections: split.sections,
+            warnings: [
+                `AI question detector failed: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+                ...split.warnings,
+            ],
+        }
+    }
+}
+
+function shouldUseAiQuestionDetector(
+    markdown: string,
+    sections: PdfMarkdownSection[],
+): boolean {
+    if (markdown.length < 8000 || sections.length === 0) return false
+    const questionNumbers = sections
+        .map((section) => section.questionNumber)
+        .filter((number): number is number => typeof number === "number")
+    const hasExamRange = questionNumbers.some(
+        (number) => number >= 18 && number <= 45,
+    )
+    if (!hasExamRange) return false
+
+    const hasShortQuestion = sections.some(
+        (section) => section.questionNumber && section.charCount < 250,
+    )
+    const hasLargeGaps = questionNumbers.some((number, index) => {
+        const next = questionNumbers[index + 1]
+        return next !== undefined && next - number > 2
+    })
+    return hasShortQuestion || hasLargeGaps || sections.length < 20
+}
+
+async function detectPdfQuestionsViaAI(
+    markdown: string,
+    filename: string,
+): Promise<PdfMarkdownSection[]> {
+    const fullText =
+        markdown.length > 120000 ? markdown.slice(0, 120000) : markdown
+    const res = await fetch("/api/detect-passages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            fullText,
+            numberRange: { min: 18, max: 45 },
+        }),
+    })
+    const data = (await res.json().catch(() => null)) as {
+        passages?: AiDetectedPassage[]
+        error?: string
+    } | null
+    if (!res.ok || !data?.passages) {
+        throw new Error(data?.error ?? `/api/detect-passages ${res.status}`)
+    }
+
+    return data.passages
+        .filter((passage) => passage.englishText.trim().length >= 50)
+        .sort((a, b) => a.number - b.number)
+        .map((passage, index) => {
+            const questionType =
+                passage.type === "기타" ? "핵심 흐름" : passage.type
+            const markdownForDiagram = [
+                passage.koreanInstruction
+                    ? `Instruction: ${passage.koreanInstruction}`
+                    : "",
+                "",
+                passage.englishText,
+            ]
+                .filter(Boolean)
+                .join("\n")
+            return {
+                id: `${baseName(filename)}-ai-q${passage.number}`,
+                sourceName: filename,
+                title: `Q${passage.number} · ${questionType}`,
+                markdown: markdownForDiagram,
+                sectionIndex: index + 1,
+                charCount: markdownForDiagram.length,
+                questionNumber: passage.number,
+                questionType,
+            }
+        })
 }
 
 async function convertPdfToMarkdown(file: File): Promise<{

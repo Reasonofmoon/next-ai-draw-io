@@ -41,6 +41,34 @@ describe("splitPdfMarkdownIntoSections", () => {
         expect(result.warnings[0]).toContain("Detected 3 exam questions")
     })
 
+    it("drops short false question markers and sorts by question number", () => {
+        const markdown = [
+            "19. 다음 글에 드러난 필자의 심경으로 가장 적절한 것은?",
+            "The narrator first felt nervous about the result, but became relieved when the missing notebook was found and the answer became clear.",
+            "",
+            "21. 밑줄 친 부분이 다음 글에서 의미하는 바로 가장 적절한 것은?",
+            "A scientist said that the team had to keep the door open, meaning that they should continue testing several possible explanations.",
+            "",
+            "22.",
+            "요지",
+            "",
+            "28.",
+            "정답",
+            "",
+            "26. 다음 글의 흐름으로 보아, 주어진 문장이 들어가기에 가장 적절한 곳은?",
+            "The passage explains a problem, adds a missing sentence that bridges two ideas, and then shows why the final conclusion follows.",
+        ].join("\n")
+
+        const result = splitPdfMarkdownIntoSections(markdown, "mixed.pdf")
+
+        expect(
+            result.sections.map((section) => section.questionNumber),
+        ).toEqual([19, 21, 26])
+        expect(
+            result.sections.every((section) => section.charCount > 120),
+        ).toBe(true)
+    })
+
     it("splits Markdown by headings when available", () => {
         const markdown = [
             "# First Claim",

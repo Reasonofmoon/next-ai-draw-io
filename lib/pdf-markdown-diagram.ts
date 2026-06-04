@@ -61,7 +61,7 @@ function questionSections(markdown: string): Array<{
     title: string
     text: string
 }> {
-    const markers = [
+    const rawMarkers = [
         ...markdown.matchAll(
             /(?:^|\n)\s*(?:#{1,6}\s*)?(?:(?:Q|문항)\s*)?([1-9]\d?)\s*(?:[.)]\s*|\n)(?=\S)/g,
         ),
@@ -72,14 +72,18 @@ function questionSections(markdown: string): Array<{
         }))
         .filter((marker) => Number.isFinite(marker.number))
 
-    const englishExamMarkers = markers.filter(
+    const englishExamMarkers = rawMarkers.filter(
         (marker) => marker.number >= 18 && marker.number <= 45,
     )
-    const activeMarkers =
-        englishExamMarkers.length >= 2 ? englishExamMarkers : markers
+    const broadMarkers =
+        englishExamMarkers.length >= 2 ? englishExamMarkers : rawMarkers
+    const activeMarkers = broadMarkers.filter((marker, idx) => {
+        const nextIndex = broadMarkers[idx + 1]?.index ?? markdown.length
+        return isLikelyQuestionSegment(markdown.slice(marker.index, nextIndex))
+    })
     if (activeMarkers.length < 2) return []
 
-    return activeMarkers.map((marker, idx) => {
+    const sections = activeMarkers.map((marker, idx) => {
         const end = activeMarkers[idx + 1]?.index ?? markdown.length
         const text = markdown.slice(marker.index, end).trim()
         const questionType = inferQuestionType(text)
@@ -90,6 +94,32 @@ function questionSections(markdown: string): Array<{
             text,
         }
     })
+
+    const byNumber = new Map<number, (typeof sections)[number]>()
+    for (const section of sections) {
+        const previous = byNumber.get(section.questionNumber)
+        if (!previous || section.text.length > previous.text.length) {
+            byNumber.set(section.questionNumber, section)
+        }
+    }
+
+    return [...byNumber.values()].sort(
+        (a, b) => a.questionNumber - b.questionNumber,
+    )
+}
+
+function isLikelyQuestionSegment(text: string): boolean {
+    const normalized = text.replace(/\s+/g, " ").trim()
+    if (normalized.length < 120) return false
+    if (
+        /다음\s*글|글의|목적|심경|분위기|주제|제목|빈칸|밑줄|어법|어휘|요지|요약|순서|주어진|함축|무관|낱말|문장|흐름/i.test(
+            normalized,
+        )
+    ) {
+        return true
+    }
+    const englishLetters = (normalized.match(/[A-Za-z]/g) ?? []).length
+    return englishLetters >= 120
 }
 
 function inferQuestionType(text: string): string {

@@ -142,7 +142,7 @@ export async function POST(req: Request): Promise<Response> {
         "2. Extract ONLY the English reading text — skip Korean translations, Korean instructions (they go in koreanInstruction field), answer choices (①②③④⑤), and listening scripts (lines starting with W:/M:/여:/남:).",
         "3. If a question is a paragraph-ordering question (순서 배열), reconstruct the English passage as (Given) (A) (B) (C) in the order they appear.",
         "4. For 빈칸 추론, include the passage WITH the blank (use ______ or [BLANK] as placeholder).",
-        "5. Group multi-question passages (e.g., 43-45 share one passage) into a single entry with the first question number.",
+        "5. For multi-question passages (e.g., 41-42 or 43-45 share one passage), create a separate entry for EACH question number. Reuse the shared English passage, but keep each question's own Korean instruction and inferred type.",
         "6. Do NOT include answer commentary, 해설, 풀이, [정답], or 출제의도 sections — these are not the original problem, they are the answer key.",
         "7. If you cannot find enough clean English text for a question (under 50 chars), omit it.",
         "8. Confidence = high if passage is clearly delimited, medium if you had to infer boundaries, low if uncertain.",
