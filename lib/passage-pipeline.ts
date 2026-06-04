@@ -54,6 +54,16 @@ function typeSpecificGuidance(questionType: string): string {
                 "STRUCTURE: top-to-bottom — Context (neutral) → Claim (primary, bold) → ",
                 "2–3 Supporting reasons (evidence) → Implication/restatement (primary).",
             ].join(" ")
+        case "핵심 흐름":
+            return [
+                "TYPE: core discourse flow.",
+                "STRUCTURE: left-to-right chain showing the passage's essential logic:",
+                "Context/Problem (neutral) → Key observation (evidence) → Main claim",
+                "(primary, bold) → Consequence/implication (primary). Add one",
+                "counterpoint/tension box only if the passage clearly pivots.",
+                "Arrow labels should name the logic, such as 'because', 'therefore',",
+                "'contrast', or 'leads to'.",
+            ].join(" ")
         case "빈칸 추론":
             return [
                 "TYPE: fill-in-the-blank reasoning.",
