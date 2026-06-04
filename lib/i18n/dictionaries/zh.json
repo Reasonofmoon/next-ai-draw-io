@@ -123,7 +123,7 @@
         "applyProxy": "应用",
         "proxyApplied": "代理设置已应用",
         "diagramValidation": "图表验证（实验性）",
-        "diagramValidationDescription": "使用视觉语言模型验证生成的图表。需要支持视觉的模型，如 GPT-5.2 或 Sonnet-4.5。",
+        "diagramValidationDescription": "使用视觉语言模型验证生成的图表。需要支持视觉的模型，如 GPT-5.5 或 Sonnet-4.5。",
         "enabled": "已启用",
         "disabled": "已禁用",
         "customSystemMessage": "自定义系统消息",

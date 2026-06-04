@@ -71,7 +71,7 @@ python -m vllm.entrypoints.openai.api_server \
 1. Model doesn't support vision (e.g., Kimi K2, DeepSeek, Qwen text models)
 
 **Solution**:
-- Use vision-capable models: GPT-5.2, Claude 4.5 Sonnet, Gemini 3 Pro
+- Use vision-capable models: GPT-5.5, Claude 4.5 Sonnet, Gemini 3 Pro
 - Models with `vision` or `vl` in name support images
 - Update to latest version (v0.4.9+)
 

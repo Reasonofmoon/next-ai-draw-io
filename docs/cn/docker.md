@@ -9,7 +9,7 @@
 ```bash
 docker run -d -p 3000:3000 \
   -e AI_PROVIDER=openai \
-  -e AI_MODEL=gpt-4o \
+  -e AI_MODEL=gpt-5.5 \
   -e OPENAI_API_KEY=your_api_key \
   ghcr.io/dayuanjiang/next-ai-draw-io:latest
 ```

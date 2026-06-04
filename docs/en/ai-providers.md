@@ -52,7 +52,7 @@ GOOGLE_VERTEX_BASE_URL=https://your-custom-endpoint
 
 ```bash
 OPENAI_API_KEY=your_api_key
-AI_MODEL=gpt-4o
+AI_MODEL=gpt-5.5
 ```
 
 Optional custom endpoint (for OpenAI-compatible services):
@@ -194,7 +194,7 @@ Vercel AI Gateway provides unified access to multiple AI providers through a sin
 
 ```bash
 AI_GATEWAY_API_KEY=your_gateway_api_key
-AI_MODEL=openai/gpt-4o
+AI_MODEL=openai/gpt-5.5
 ```
 
 **Custom Gateway URL (for local development or self-hosted Gateway):**
@@ -202,12 +202,12 @@ AI_MODEL=openai/gpt-4o
 ```bash
 AI_GATEWAY_API_KEY=your_custom_api_key
 AI_GATEWAY_BASE_URL=https://your-custom-gateway.com/v1/ai
-AI_MODEL=openai/gpt-4o
+AI_MODEL=openai/gpt-5.5
 ```
 
 Model format uses `provider/model` syntax:
 
--   `openai/gpt-4o` - OpenAI GPT-4o
+-   `openai/gpt-5.5` - OpenAI GPT-5.5
 -   `anthropic/claude-sonnet-4-5` - Anthropic Claude Sonnet 4.5
 -   `google/gemini-2.0-flash` - Google Gemini 2.0 Flash
 
@@ -322,7 +322,7 @@ Administrators can configure multiple server-side models that are available to a
 Set `AI_MODELS_CONFIG` as a JSON string:
 
 ```bash
-AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["gpt-4o"],"default":true}]}'
+AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["gpt-5.5"],"default":true}]}'
 ```
 
 **Option 2: Config File**
@@ -337,7 +337,7 @@ Create an `ai-models.json` file in the project root (or set `AI_MODELS_CONFIG_PA
     {
       "name": "OpenAI Production",
       "provider": "openai",
-      "models": ["gpt-4o", "gpt-4o-mini"],
+      "models": ["gpt-5.5", "gpt-5.4-mini"],
       "default": true
     },
     {
@@ -387,14 +387,14 @@ TEMPERATURE=0  # More deterministic output (recommended for diagrams)
 ```
 
 **Important**: Leave `TEMPERATURE` unset for models that don't support temperature settings, such as:
-- GPT-5.1 and other reasoning models
+- GPT-5.5 and other reasoning models
 - Some specialized models
 
 When unset, the model uses its default behavior.
 
 ## Recommendations
 
--   **Best experience**: Use models with vision support (GPT-4o, Claude, Gemini) for image-to-diagram features
+-   **Best experience**: Use models with vision support (GPT-5.5, Claude, Gemini) for image-to-diagram features
 -   **Budget-friendly**: DeepSeek offers competitive pricing
 -   **Privacy**: Use Ollama for fully local, offline operation (requires powerful hardware)
 -   **Flexibility**: OpenRouter provides access to many models through a single API

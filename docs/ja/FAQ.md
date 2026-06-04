@@ -71,7 +71,7 @@ python -m vllm.entrypoints.openai.api_server \
 1. モデルがビジョン機能をサポートしていない（Kimi K2、DeepSeek、Qwenテキストモデルなど）
 
 **解決策**:
-- ビジョン対応モデルを使用：GPT-5.2、Claude 4.5 Sonnet、Gemini 3 Pro
+- ビジョン対応モデルを使用：GPT-5.5、Claude 4.5 Sonnet、Gemini 3 Pro
 - モデル名に `vision` または `vl` が含まれているものは画像をサポート
 - 最新バージョン（v0.4.9+）にアップデート
 

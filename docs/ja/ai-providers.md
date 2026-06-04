@@ -37,7 +37,7 @@ GOOGLE_BASE_URL=https://your-custom-endpoint
 
 ```bash
 OPENAI_API_KEY=your_api_key
-AI_MODEL=gpt-4o
+AI_MODEL=gpt-5.5
 ```
 
 任意のカスタムエンドポイント（OpenAI 互換サービス用）:
@@ -179,7 +179,7 @@ Vercel AI Gateway は、単一の API キーで複数の AI プロバイダー�
 
 ```bash
 AI_GATEWAY_API_KEY=your_gateway_api_key
-AI_MODEL=openai/gpt-4o
+AI_MODEL=openai/gpt-5.5
 ```
 
 **カスタム Gateway URL (ローカル開発またはセルフホスト Gateway 用):**
@@ -187,12 +187,12 @@ AI_MODEL=openai/gpt-4o
 ```bash
 AI_GATEWAY_API_KEY=your_custom_api_key
 AI_GATEWAY_BASE_URL=https://your-custom-gateway.com/v1/ai
-AI_MODEL=openai/gpt-4o
+AI_MODEL=openai/gpt-5.5
 ```
 
 モデル形式は `provider/model` 構文を使用します:
 
--   `openai/gpt-4o` - OpenAI GPT-4o
+-   `openai/gpt-5.5` - OpenAI GPT-5.5
 -   `anthropic/claude-sonnet-4-5` - Anthropic Claude Sonnet 4.5
 -   `google/gemini-2.0-flash` - Google Gemini 2.0 Flash
 
@@ -307,7 +307,7 @@ AI_PROVIDER=google  # または: openai, anthropic, deepseek, siliconflow, douba
 `AI_MODELS_CONFIG` をJSON文字列として設定：
 
 ```bash
-AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["gpt-4o"],"default":true}]}'
+AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["gpt-5.5"],"default":true}]}'
 ```
 
 **方法2：設定ファイル**
@@ -322,7 +322,7 @@ AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["
     {
       "name": "OpenAI Production",
       "provider": "openai",
-      "models": ["gpt-4o", "gpt-4o-mini"],
+      "models": ["gpt-5.5", "gpt-5.4-mini"],
       "default": true
     },
     {
@@ -372,14 +372,14 @@ TEMPERATURE=0  # より決定論的な出力（ダイアグラムに推奨）
 ```
 
 **重要**: 以下の Temperature 設定をサポートしていないモデルでは、`TEMPERATURE` を未設定のままにしてください:
-- GPT-5.1 およびその他の推論モデル
+- GPT-5.5 およびその他の推論モデル
 - 一部の特殊なモデル
 
 未設定の場合、モデルはデフォルトの挙動を使用します。
 
 ## 推奨事項
 
--   **最高の体験**: 画像からダイアグラムを生成する機能には、ビジョン（画像認識）をサポートするモデル（GPT-4o, Claude, Gemini）を使用してください
+-   **最高の体験**: 画像からダイアグラムを生成する機能には、ビジョン（画像認識）をサポートするモデル（GPT-5.5, Claude, Gemini）を使用してください
 -   **低コスト**: DeepSeek は競争力のある価格を提供しています
 -   **プライバシー**: 完全にローカルなオフライン操作には Ollama を使用してください（強力なハードウェアが必要です）
 -   **柔軟性**: OpenRouter は単一の API で多数のモデルへのアクセスを提供します

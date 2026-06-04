@@ -37,7 +37,7 @@ GOOGLE_BASE_URL=https://your-custom-endpoint
 
 ```bash
 OPENAI_API_KEY=your_api_key
-AI_MODEL=gpt-4o
+AI_MODEL=gpt-5.5
 ```
 
 可选的自定义端点（用于 OpenAI 兼容服务）：
@@ -179,7 +179,7 @@ Vercel AI Gateway 通过单个 API 密钥提供对多个 AI 提供商的统一�
 
 ```bash
 AI_GATEWAY_API_KEY=your_gateway_api_key
-AI_MODEL=openai/gpt-4o
+AI_MODEL=openai/gpt-5.5
 ```
 
 **自定义网关 URL（用于本地开发或自托管网关）：**
@@ -187,12 +187,12 @@ AI_MODEL=openai/gpt-4o
 ```bash
 AI_GATEWAY_API_KEY=your_custom_api_key
 AI_GATEWAY_BASE_URL=https://your-custom-gateway.com/v1/ai
-AI_MODEL=openai/gpt-4o
+AI_MODEL=openai/gpt-5.5
 ```
 
 模型格式使用 `provider/model` 语法：
 
--   `openai/gpt-4o` - OpenAI GPT-4o
+-   `openai/gpt-5.5` - OpenAI GPT-5.5
 -   `anthropic/claude-sonnet-4-5` - Anthropic Claude Sonnet 4.5
 -   `google/gemini-2.0-flash` - Google Gemini 2.0 Flash
 
@@ -307,7 +307,7 @@ AI_PROVIDER=google  # 或：openai, anthropic, deepseek, siliconflow, doubao, az
 设置 `AI_MODELS_CONFIG` 为 JSON 字符串：
 
 ```bash
-AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["gpt-4o"],"default":true}]}'
+AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["gpt-5.5"],"default":true}]}'
 ```
 
 **方式二：配置文件**
@@ -322,7 +322,7 @@ AI_MODELS_CONFIG='{"providers":[{"name":"OpenAI","provider":"openai","models":["
     {
       "name": "OpenAI Production",
       "provider": "openai",
-      "models": ["gpt-4o", "gpt-4o-mini"],
+      "models": ["gpt-5.5", "gpt-5.4-mini"],
       "default": true
     },
     {
@@ -372,14 +372,14 @@ TEMPERATURE=0  # 输出更具确定性（推荐用于图表）
 ```
 
 **重要提示**：对于不支持温度设置的模型（例如以下模型），请勿设置 `TEMPERATURE`：
-- GPT-5.1 和其他推理模型
+- GPT-5.5 和其他推理模型
 - 某些专用模型
 
 未设置时，模型将使用其默认行为。
 
 ## 推荐
 
--   **最佳体验**：使用支持视觉的模型（GPT-4o, Claude, Gemini）以获得图像转图表功能
+-   **最佳体验**：使用支持视觉的模型（GPT-5.5, Claude, Gemini）以获得图像转图表功能
 -   **经济实惠**：DeepSeek 提供具有竞争力的价格
 -   **隐私保护**：使用 Ollama 进行完全本地、离线的操作（需要强大的硬件支持）
 -   **灵活性**：OpenRouter 通过单一 API 提供对众多模型的访问

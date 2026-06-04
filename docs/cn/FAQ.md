@@ -71,7 +71,7 @@ python -m vllm.entrypoints.openai.api_server \
 1. 模型不支持视觉功能（如 Kimi K2、DeepSeek、Qwen 文本模型）
 
 **解决方案**:
-- 使用支持视觉的模型：GPT-5.2、Claude 4.5 Sonnet、Gemini 3 Pro
+- 使用支持视觉的模型：GPT-5.5、Claude 4.5 Sonnet、Gemini 3 Pro
 - 模型名带 `vision` 或 `vl` 的支持图片
 - 更新到最新版本（v0.4.9+）
 

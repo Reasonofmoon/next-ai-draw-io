@@ -1133,7 +1133,7 @@ export function getAIModel(overrides?: ClientOverrides): ModelConfig {
 
         case "gateway": {
             // Vercel AI Gateway - unified access to multiple AI providers
-            // Model format: "provider/model" e.g., "openai/gpt-4o", "anthropic/claude-sonnet-4-5"
+            // Model format: "provider/model" e.g., "openai/gpt-5.5", "anthropic/claude-sonnet-4-5"
             // See: https://vercel.com/ai-gateway
             const apiKey = resolveApiKey(overrides, "AI_GATEWAY_API_KEY")
             const serverBaseUrl = resolveBaseUrlEnv(

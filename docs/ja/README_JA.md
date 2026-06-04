@@ -217,7 +217,7 @@ AWS BedrockとOpenRouter以外のすべてのプロバイダーはカスタム�
 
 管理者は、ユーザーが個人のAPIキーを提供することなく利用できる複数のサーバーサイドモデルを設定できます。`AI_MODELS_CONFIG` 環境変数（JSON文字列）または `ai-models.json` ファイルで設定します。
 
-**モデル要件**：このタスクは厳密なフォーマット制約（draw.io XML）を持つ長文テキスト生成を伴うため、強力なモデル機能が必要です。Claude Sonnet 4.5、GPT-5.1、Gemini 3 Pro、DeepSeek V3.2/R1を推奨します。
+**モデル要件**：このタスクは厳密なフォーマット制約（draw.io XML）を持つ長文テキスト生成を伴うため、強力なモデル機能が必要です。Claude Sonnet 4.5、GPT-5.5、Gemini 3 Pro、DeepSeek V3.2/R1を推奨します。
 
 注：`claude`シリーズはAWS、Azure、GCPなどのクラウドアーキテクチャロゴ付きのdraw.ioダイアグラムで学習されているため、クラウドアーキテクチャダイアグラムを作成したい場合は最適な選択です。
 

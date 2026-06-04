@@ -26,7 +26,7 @@ export type ProviderName =
 // Individual model configuration
 export interface ModelConfig {
     id: string // UUID for this model
-    modelId: string // e.g., "gpt-4o", "claude-sonnet-4-5"
+    modelId: string // e.g., "gpt-5.5", "claude-sonnet-4-5"
     validated?: boolean // Has this model been validated
     validationError?: string // Error message if validation failed
 }
@@ -190,13 +190,12 @@ export const PROVIDER_INFO: Record<
 // Suggested models per provider for quick add
 export const SUGGESTED_MODELS: Partial<Record<ProviderName, string[]>> = {
     openai: [
-        "gpt-5.2-pro",
-        "gpt-5.2-chat-latest",
-        "gpt-5.2",
-        "gpt-5.1-codex-mini",
-        "gpt-5.1-codex",
-        "gpt-5.1-chat-latest",
-        "gpt-5.1",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "gpt-5.4",
+        "gpt-5.4-pro",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
         "gpt-5-pro",
         "gpt-5",
         "gpt-5-mini",
@@ -284,6 +283,8 @@ export const SUGGESTED_MODELS: Partial<Record<ProviderName, string[]>> = {
         "anthropic/claude-3.5-sonnet",
         "anthropic/claude-3.5-haiku",
         // OpenAI
+        "openai/gpt-5.5",
+        "openai/gpt-5.4-mini",
         "openai/gpt-4o",
         "openai/gpt-4o-mini",
         "openai/o1",
@@ -321,6 +322,8 @@ export const SUGGESTED_MODELS: Partial<Record<ProviderName, string[]>> = {
         "default",
     ],
     gateway: [
+        "openai/gpt-5.5",
+        "openai/gpt-5.4-mini",
         "openai/gpt-4o",
         "openai/gpt-4o-mini",
         "anthropic/claude-sonnet-4-5",

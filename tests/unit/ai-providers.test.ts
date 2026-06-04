@@ -151,7 +151,7 @@ describe("supportsPromptCaching", () => {
     })
 
     it("returns false for non-Claude models", () => {
-        expect(supportsPromptCaching("gpt-4o")).toBe(false)
+        expect(supportsPromptCaching("gpt-5.5")).toBe(false)
         expect(supportsPromptCaching("gemini-pro")).toBe(false)
         expect(supportsPromptCaching("deepseek-chat")).toBe(false)
     })
@@ -232,7 +232,7 @@ describe("supportsImageInput", () => {
 
     it("returns true for Claude and GPT models by default", () => {
         expect(supportsImageInput("claude-sonnet-4-5")).toBe(true)
-        expect(supportsImageInput("gpt-4o")).toBe(true)
+        expect(supportsImageInput("gpt-5.5")).toBe(true)
         expect(supportsImageInput("gemini-pro")).toBe(true)
     })
 })

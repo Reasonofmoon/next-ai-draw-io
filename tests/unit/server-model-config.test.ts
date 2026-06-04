@@ -21,7 +21,7 @@ describe("ServerModelsConfigSchema", () => {
                 {
                     name: "OpenAI Server",
                     provider: "openai",
-                    models: ["gpt-4o"],
+                    models: ["gpt-5.5"],
                 },
             ],
         }
@@ -52,7 +52,7 @@ describe("ServerModelsConfigSchema", () => {
                 {
                     name: "OpenAI Server",
                     provider: "openai",
-                    models: ["gpt-4o"],
+                    models: ["gpt-5.5"],
                     apiKeyEnv: "OPENAI_API_KEY_TEAM_A",
                 },
             ],
@@ -68,7 +68,7 @@ describe("ServerModelsConfigSchema", () => {
                 {
                     name: "OpenAI Server",
                     provider: "openai",
-                    models: ["gpt-4o"],
+                    models: ["gpt-5.5"],
                     apiKeyEnv: ["OPENAI_KEY_1", "OPENAI_KEY_2", "OPENAI_KEY_3"],
                 },
             ],
@@ -88,7 +88,7 @@ describe("ServerModelsConfigSchema", () => {
                 {
                     name: "OpenAI Server",
                     provider: "openai",
-                    models: ["gpt-4o"],
+                    models: ["gpt-5.5"],
                     apiKeyEnv: [],
                 },
             ],
@@ -103,7 +103,7 @@ describe("ServerModelsConfigSchema", () => {
                 {
                     name: "OpenAI Server",
                     provider: "openai",
-                    models: ["gpt-4o"],
+                    models: ["gpt-5.5"],
                     apiKeyEnv: ["VALID_KEY", ""],
                 },
             ],
@@ -129,7 +129,7 @@ describe("loadFlattenedServerModels", () => {
                 {
                     name: "OpenAI Server",
                     provider: "openai",
-                    models: ["gpt-4o", "gpt-4o-mini"],
+                    models: ["gpt-5.5", "gpt-5.4-mini"],
                     default: true,
                 },
             ],
@@ -146,7 +146,7 @@ describe("loadFlattenedServerModels", () => {
 
         const defaultModel = defaults[0]
         expect(defaultModel.provider).toBe("openai")
-        expect(defaultModel.modelId).toBe("gpt-4o") // First model of default provider
+        expect(defaultModel.modelId).toBe("gpt-5.5") // First model of default provider
     })
 
     it("preserves apiKeyEnv array in flattened models for load balancing", async () => {
@@ -155,7 +155,7 @@ describe("loadFlattenedServerModels", () => {
                 {
                     name: "OpenAI LoadBalanced",
                     provider: "openai",
-                    models: ["gpt-4o"],
+                    models: ["gpt-5.5"],
                     apiKeyEnv: ["OPENAI_KEY_1", "OPENAI_KEY_2"],
                 },
             ],
