@@ -1,3 +1,4 @@
+import { parseCsatCsv } from "@/lib/csat-csv"
 import type { DetectedPassage } from "@/lib/hwp-utils"
 
 export interface PdfMarkdownSection {
@@ -265,6 +266,116 @@ export function splitPdfMarkdownIntoSections(
     return { sections, warnings }
 }
 
+export function splitCsvIntoDiagramSections(
+    csv: string,
+    sourceName: string,
+): PdfMarkdownSplitResult {
+    const parsed = parseCsatCsv(csv)
+    const idPrefix = baseId(sourceName) || "csv"
+    const warnings = [...parsed.warnings]
+
+    const sections = parsed.passages.map((passage, index) => {
+        const markdown = limitForDiagram(
+            [
+                passage.koreanInstruction
+                    ? `Instruction: ${passage.koreanInstruction}`
+                    : "",
+                "",
+                passage.englishPassage,
+            ]
+                .filter(Boolean)
+                .join("\n"),
+        )
+        return {
+            id: `${idPrefix}-q${passage.questionNumber}-${index + 1}`,
+            sourceName,
+            title: `Q${passage.questionNumber} · ${passage.questionType}`,
+            markdown,
+            sectionIndex: index + 1,
+            charCount: markdown.length,
+            questionNumber: passage.questionNumber,
+            questionType: passage.questionType,
+        }
+    })
+
+    if (sections.length === 0) {
+        warnings.push("CSV에서 다이어그램으로 만들 문항을 찾지 못했습니다.")
+    }
+
+    return { sections, warnings }
+}
+
+export function splitJsonIntoDiagramSections(
+    jsonText: string,
+    sourceName: string,
+): PdfMarkdownSplitResult {
+    let parsed: unknown
+    try {
+        parsed = JSON.parse(jsonText)
+    } catch (err) {
+        return {
+            sections: [],
+            warnings: [
+                `JSON parse failed: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            ],
+        }
+    }
+
+    const items = extractJsonItems(parsed)
+    const idPrefix = baseId(sourceName) || "json"
+    const warnings: string[] = []
+    const sections = items.map((item, index) => {
+        const questionNumber =
+            numberField(item, [
+                "questionNumber",
+                "question_number",
+                "number",
+                "no",
+                "q",
+            ]) ?? index + 1
+        const rawMarkdown = markdownFromJsonItem(item)
+        const markdown = limitForDiagram(rawMarkdown)
+        const questionType =
+            stringField(item, [
+                "questionType",
+                "question_type",
+                "type",
+                "category",
+            ]) ?? inferQuestionType(markdown)
+        const itemTitle =
+            stringField(item, ["title", "name", "heading"]) ??
+            `Q${questionNumber} · ${questionType}`
+
+        if (markdown.trim().length < 20) {
+            warnings.push(`${itemTitle}: 내용이 너무 짧습니다.`)
+        }
+
+        return {
+            id: `${idPrefix}-q${questionNumber}-${index + 1}`,
+            sourceName,
+            title: itemTitle,
+            markdown,
+            sectionIndex: index + 1,
+            charCount: markdown.length,
+            questionNumber,
+            questionType,
+        }
+    })
+
+    if (sections.length === 0) {
+        warnings.push("JSON에서 다이어그램으로 만들 항목을 찾지 못했습니다.")
+    }
+
+    return {
+        sections: sections.filter(
+            (section) => section.markdown.trim().length >= 20,
+        ),
+        warnings,
+    }
+}
+
 export function pdfSectionToDetectedPassage(
     section: PdfMarkdownSection,
 ): DetectedPassage {
@@ -287,4 +398,78 @@ export function pdfSectionToDetectedPassage(
         sectionIdx: section.sectionIndex - 1,
         insertAfterParaIdx: 0,
     }
+}
+
+function extractJsonItems(value: unknown): unknown[] {
+    if (Array.isArray(value)) return value
+    if (value && typeof value === "object") {
+        const record = value as Record<string, unknown>
+        for (const key of ["questions", "passages", "items", "data", "rows"]) {
+            const candidate = record[key]
+            if (Array.isArray(candidate)) return candidate
+        }
+        return [value]
+    }
+    return []
+}
+
+function stringField(value: unknown, keys: string[]): string | undefined {
+    if (!value || typeof value !== "object") return undefined
+    const record = value as Record<string, unknown>
+    for (const key of keys) {
+        const field = record[key]
+        if (typeof field === "string" && field.trim()) return field.trim()
+    }
+    return undefined
+}
+
+function numberField(value: unknown, keys: string[]): number | undefined {
+    const raw = stringField(value, keys)
+    const fromString = raw ? Number.parseInt(raw, 10) : Number.NaN
+    if (Number.isFinite(fromString)) return fromString
+    if (!value || typeof value !== "object") return undefined
+    const record = value as Record<string, unknown>
+    for (const key of keys) {
+        const field = record[key]
+        if (typeof field === "number" && Number.isFinite(field)) return field
+    }
+    return undefined
+}
+
+function markdownFromJsonItem(item: unknown): string {
+    if (typeof item === "string") return item
+    if (!item || typeof item !== "object") return ""
+
+    const record = item as Record<string, unknown>
+    const parts = [
+        stringField(record, [
+            "koreanInstruction",
+            "instruction",
+            "prompt",
+            "question",
+        ]),
+        stringField(record, [
+            "englishPassage",
+            "english_passage",
+            "passage",
+            "text",
+            "content",
+            "markdown",
+            "body",
+        ]),
+        choicesToMarkdown(record.choices),
+    ].filter(Boolean)
+
+    if (parts.length > 0) return parts.join("\n\n")
+    return JSON.stringify(record, null, 2)
+}
+
+function choicesToMarkdown(value: unknown): string | undefined {
+    if (!Array.isArray(value) || value.length === 0) return undefined
+    return value
+        .map((choice, index) => {
+            if (typeof choice === "string") return `${index + 1}. ${choice}`
+            return `${index + 1}. ${JSON.stringify(choice)}`
+        })
+        .join("\n")
 }

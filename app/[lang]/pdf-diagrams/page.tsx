@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import Image from "next/image"
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { i18n, type Locale } from "@/lib/i18n/config"
 import {
     buildDrawioShareUrl,
     DrawioPngRenderer,
@@ -20,6 +21,8 @@ import { makeZip } from "@/lib/passage-pipeline-zip"
 import {
     type PdfMarkdownSection,
     pdfSectionToDetectedPassage,
+    splitCsvIntoDiagramSections,
+    splitJsonIntoDiagramSections,
     splitPdfMarkdownIntoSections,
 } from "@/lib/pdf-markdown-diagram"
 import { T } from "@/lib/workbench-tokens"
@@ -44,6 +47,13 @@ interface DiagramResult {
     pngDataUrl?: string
     shareUrl?: string
     error?: string
+}
+
+interface ConvertedInput {
+    markdown: string
+    engine: string
+    sections: PdfMarkdownSection[]
+    warnings: string[]
 }
 
 const page = {
@@ -184,6 +194,11 @@ const resultCard = {
 } as const
 
 export default function PdfDiagramsPage() {
+    const currentLang =
+        typeof window === "undefined"
+            ? i18n.defaultLocale
+            : ((window.location.pathname.split("/")[1] ||
+                  i18n.defaultLocale) as Locale)
     const [documents, setDocuments] = useState<PdfDocument[]>([])
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [results, setResults] = useState<Map<string, DiagramResult>>(
@@ -213,17 +228,17 @@ export default function PdfDiagramsPage() {
     }
 
     const handleFiles = async (files: FileList | File[]) => {
-        const pdfs = Array.from(files).filter((file) =>
-            file.name.toLowerCase().endsWith(".pdf"),
+        const supportedFiles = Array.from(files).filter((file) =>
+            isSupportedInputFile(file),
         )
-        if (pdfs.length === 0 || isConverting) return
+        if (supportedFiles.length === 0 || isConverting) return
 
         setIsConverting(true)
         setDocuments([])
         setResults(new Map())
 
         const nextDocuments: PdfDocument[] = []
-        for (const file of pdfs) {
+        for (const file of supportedFiles) {
             const id = `${file.name}-${file.size}-${file.lastModified}`
             const pending: PdfDocument = {
                 id,
@@ -236,18 +251,14 @@ export default function PdfDiagramsPage() {
             setDocuments([...nextDocuments])
 
             try {
-                const converted = await convertPdfToMarkdown(file)
-                const split = splitPdfMarkdownIntoSections(
-                    converted.markdown,
-                    file.name,
-                )
+                const converted = await convertInputFile(file)
                 const ready: PdfDocument = {
                     ...pending,
                     status: "ready",
                     markdown: converted.markdown,
                     engine: converted.engine,
-                    sections: split.sections,
-                    warnings: split.warnings,
+                    sections: converted.sections,
+                    warnings: converted.warnings,
                 }
                 nextDocuments[nextDocuments.length - 1] = ready
                 setDocuments([...nextDocuments])
@@ -366,7 +377,7 @@ export default function PdfDiagramsPage() {
                 <div style={topBar}>
                     <div>
                         <h1 style={title} data-testid="pdf-diagrams-title">
-                            PDF Markdown 흐름 다이어그램
+                            Paper 파일 흐름 다이어그램
                         </h1>
                         <p
                             style={{
@@ -375,17 +386,36 @@ export default function PdfDiagramsPage() {
                                 fontSize: 14,
                             }}
                         >
-                            Microsoft MarkItDown으로 PDF를 Markdown으로 바꾼 뒤
-                            핵심 흐름 다이어그램을 배치 생성합니다.
+                            PDF는 MarkItDown으로 Markdown 변환하고, CSV/JSON은
+                            문항 데이터로 읽어 문제별 다이어그램을 배치
+                            생성합니다.
                         </p>
                     </div>
                     <div style={toolbar}>
+                        <a
+                            href={`/${currentLang}`}
+                            style={{
+                                ...button("secondary"),
+                                textDecoration: "none",
+                            }}
+                        >
+                            기존 Paper
+                        </a>
+                        <a
+                            href={`/${currentLang}/csv-passages`}
+                            style={{
+                                ...button("secondary"),
+                                textDecoration: "none",
+                            }}
+                        >
+                            CSV 전용
+                        </a>
                         <label style={button("secondary", isConverting)}>
                             <Upload size={16} />
-                            PDF 업로드
+                            파일 업로드
                             <input
                                 type="file"
-                                accept="application/pdf,.pdf"
+                                accept="application/pdf,.pdf,text/csv,.csv,application/json,.json"
                                 multiple
                                 disabled={isConverting}
                                 style={{ display: "none" }}
@@ -415,7 +445,7 @@ export default function PdfDiagramsPage() {
                     <section style={panel}>
                         <div style={panelHeader}>
                             <FileText size={18} />
-                            PDF 변환
+                            파일 입력
                         </div>
                         <div style={panelBody}>
                             <div
@@ -443,13 +473,13 @@ export default function PdfDiagramsPage() {
                                         marginTop: 6,
                                     }}
                                 >
-                                    파일당 25MB까지 처리합니다.
+                                    PDF, CSV, JSON을 파일당 25MB까지 처리합니다.
                                 </div>
                             </div>
 
                             <div style={{ marginTop: 16 }}>
                                 {documents.length === 0 ? (
-                                    <Empty text="아직 업로드된 PDF가 없습니다." />
+                                    <Empty text="아직 업로드된 파일이 없습니다." />
                                 ) : (
                                     documents.map((doc) => (
                                         <DocumentCard key={doc.id} doc={doc} />
@@ -466,7 +496,7 @@ export default function PdfDiagramsPage() {
                         </div>
                         <div style={panelBody}>
                             <div style={statRow}>
-                                <Stat label="PDF" value={documents.length} />
+                                <Stat label="파일" value={documents.length} />
                                 <Stat label="섹션" value={sections.length} />
                                 <Stat label="선택" value={selectedIds.size} />
                                 <Stat
@@ -935,6 +965,46 @@ function Empty({ text }: { text: string }) {
             {text}
         </div>
     )
+}
+
+function isSupportedInputFile(file: File): boolean {
+    const name = file.name.toLowerCase()
+    return (
+        name.endsWith(".pdf") || name.endsWith(".csv") || name.endsWith(".json")
+    )
+}
+
+async function convertInputFile(file: File): Promise<ConvertedInput> {
+    const name = file.name.toLowerCase()
+    if (name.endsWith(".csv")) {
+        const markdown = await file.text()
+        const split = splitCsvIntoDiagramSections(markdown, file.name)
+        return {
+            markdown,
+            engine: "csv-question-parser",
+            sections: split.sections,
+            warnings: split.warnings,
+        }
+    }
+    if (name.endsWith(".json")) {
+        const markdown = await file.text()
+        const split = splitJsonIntoDiagramSections(markdown, file.name)
+        return {
+            markdown,
+            engine: "json-question-parser",
+            sections: split.sections,
+            warnings: split.warnings,
+        }
+    }
+
+    const converted = await convertPdfToMarkdown(file)
+    const split = splitPdfMarkdownIntoSections(converted.markdown, file.name)
+    return {
+        markdown: converted.markdown,
+        engine: converted.engine,
+        sections: split.sections,
+        warnings: split.warnings,
+    }
 }
 
 async function convertPdfToMarkdown(file: File): Promise<{

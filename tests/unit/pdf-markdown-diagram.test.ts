@@ -2,6 +2,8 @@
 import { describe, expect, it } from "vitest"
 import {
     pdfSectionToDetectedPassage,
+    splitCsvIntoDiagramSections,
+    splitJsonIntoDiagramSections,
     splitPdfMarkdownIntoSections,
 } from "@/lib/pdf-markdown-diagram"
 
@@ -93,5 +95,48 @@ describe("splitPdfMarkdownIntoSections", () => {
         expect(passage.questionType).toBe("문서 핵심 흐름")
         expect(passage.koreanInstruction).toContain("MarkItDown")
         expect(passage.englishPassage).toContain("Source: doc.pdf")
+    })
+
+    it("turns uploaded CSV rows into one diagram section per question", () => {
+        const csv = [
+            "questionNumber,questionType,koreanInstruction,englishPassage",
+            '18,목적,다음 글의 목적으로 가장 적절한 것은?,"A teacher writes to explain that the class schedule will change because the library is being repaired next week."',
+            '19,주제,다음 글의 주제로 가장 적절한 것은?,"Learning improves when students connect examples with a central idea and then explain it in their own words."',
+        ].join("\n")
+
+        const result = splitCsvIntoDiagramSections(csv, "questions.csv")
+
+        expect(result.sections).toHaveLength(2)
+        expect(
+            result.sections.map((section) => section.questionNumber),
+        ).toEqual([18, 19])
+        expect(result.sections[0].questionType).toBe("목적")
+    })
+
+    it("turns uploaded JSON arrays into one diagram section per item", () => {
+        const json = JSON.stringify([
+            {
+                questionNumber: 21,
+                questionType: "요지",
+                instruction: "다음 글의 요지로 가장 적절한 것은?",
+                passage:
+                    "Careful observation helps people discover patterns, compare possible explanations, and reach a clearer conclusion.",
+                choices: ["Observation supports reasoning"],
+            },
+            {
+                number: 22,
+                title: "Vocabulary item",
+                text: "A short passage can still be diagrammed when it contains a clear context, evidence, and implication.",
+            },
+        ])
+
+        const result = splitJsonIntoDiagramSections(json, "questions.json")
+
+        expect(result.sections).toHaveLength(2)
+        expect(result.sections[0]).toMatchObject({
+            questionNumber: 21,
+            questionType: "요지",
+        })
+        expect(result.sections[1].title).toBe("Vocabulary item")
     })
 })
