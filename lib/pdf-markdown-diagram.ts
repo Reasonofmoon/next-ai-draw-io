@@ -7,6 +7,8 @@ export interface PdfMarkdownSection {
     markdown: string
     sectionIndex: number
     charCount: number
+    questionNumber?: number
+    questionType?: string
 }
 
 export interface PdfMarkdownSplitResult {
@@ -16,6 +18,7 @@ export interface PdfMarkdownSplitResult {
 
 const DEFAULT_MAX_SECTION_CHARS = 8500
 const DEFAULT_MIN_SECTION_CHARS = 180
+const MAX_DIAGRAM_MARKDOWN_CHARS = 9000
 
 function cleanMarkdown(markdown: string): string {
     return markdown
@@ -49,6 +52,88 @@ function headingSections(
             text: markdown.slice(start, end).trim(),
         }
     })
+}
+
+function questionSections(markdown: string): Array<{
+    questionNumber: number
+    questionType: string
+    title: string
+    text: string
+}> {
+    const markers = [
+        ...markdown.matchAll(
+            /(?:^|\n)\s*(?:#{1,6}\s*)?(?:(?:Q|문항)\s*)?([1-9]\d?)\s*(?:[.)]\s*|\n)(?=\S)/g,
+        ),
+    ]
+        .map((match) => ({
+            index: match.index ?? 0,
+            number: Number.parseInt(match[1] ?? "", 10),
+        }))
+        .filter((marker) => Number.isFinite(marker.number))
+
+    const englishExamMarkers = markers.filter(
+        (marker) => marker.number >= 18 && marker.number <= 45,
+    )
+    const activeMarkers =
+        englishExamMarkers.length >= 2 ? englishExamMarkers : markers
+    if (activeMarkers.length < 2) return []
+
+    return activeMarkers.map((marker, idx) => {
+        const end = activeMarkers[idx + 1]?.index ?? markdown.length
+        const text = markdown.slice(marker.index, end).trim()
+        const questionType = inferQuestionType(text)
+        return {
+            questionNumber: marker.number,
+            questionType,
+            title: `Q${marker.number} · ${questionType}`,
+            text,
+        }
+    })
+}
+
+function inferQuestionType(text: string): string {
+    const normalized = text.replace(/\s+/g, " ")
+    if (/목적|쓴\s*이유|글을\s*쓴/.test(normalized)) return "목적"
+    if (/심경|분위기|어조/.test(normalized)) return "심경/분위기"
+    if (/함축|밑줄\s*친.*의미|underlined.*mean/i.test(normalized)) {
+        return "함축 의미"
+    }
+    if (/요지|주장/.test(normalized)) return "요지"
+    if (/주제|main\s*topic|subject/i.test(normalized)) return "주제"
+    if (/제목|title/i.test(normalized)) return "제목"
+    if (/빈칸|blank|complete/i.test(normalized)) return "빈칸 추론"
+    if (/무관|관계\s*없는|흐름으로\s*보아.*않은/.test(normalized)) {
+        return "무관한 문장"
+    }
+    if (/순서|글의\s*순서|arrange|order/i.test(normalized)) {
+        return "순서 배열"
+    }
+    if (
+        /주어진\s*문장|넣기에|sentence.*insert|insert.*sentence/i.test(
+            normalized,
+        )
+    ) {
+        return "문장 위치"
+    }
+    if (/요약문|summary|summarize/i.test(normalized)) return "요약"
+    if (/어법|문법|grammar|어휘|vocabulary|낱말/.test(normalized)) {
+        return "어법/어휘"
+    }
+    return "핵심 흐름"
+}
+
+function limitForDiagram(text: string): string {
+    if (text.length <= MAX_DIAGRAM_MARKDOWN_CHARS) return text
+
+    const head = text.slice(0, 7200)
+    const tail = text.slice(-1400)
+    return [
+        head.trimEnd(),
+        "",
+        "[...middle content omitted to keep this question within the diagram API limit...]",
+        "",
+        tail.trimStart(),
+    ].join("\n")
 }
 
 function paragraphChunks(
@@ -115,14 +200,46 @@ export function splitPdfMarkdownIntoSections(
         return { sections: [], warnings: ["Markdown content is empty."] }
     }
 
+    const idPrefix = baseId(sourceName) || "pdf"
+    const questions = questionSections(cleaned)
+
+    if (questions.length > 0) {
+        const sections = questions.map((question, index) => {
+            const markdownForDiagram = limitForDiagram(question.text)
+            if (markdownForDiagram.length < question.text.length) {
+                warnings.push(
+                    `Q${question.questionNumber}: content was shortened from ${question.text.length.toLocaleString()} to ${markdownForDiagram.length.toLocaleString()} characters for diagram generation.`,
+                )
+            }
+            return {
+                id: `${idPrefix}-q${question.questionNumber}`,
+                sourceName,
+                title: question.title,
+                markdown: markdownForDiagram,
+                sectionIndex: index + 1,
+                charCount: markdownForDiagram.length,
+                questionNumber: question.questionNumber,
+                questionType: question.questionType,
+            }
+        })
+
+        return {
+            sections,
+            warnings: [
+                `Detected ${sections.length} exam questions from PDF Markdown.`,
+                ...warnings,
+            ],
+        }
+    }
+
+    const headingBased = headingSections(cleaned)
     const primary =
-        headingSections(cleaned).length > 0
-            ? headingSections(cleaned)
+        headingBased.length > 0
+            ? headingBased
             : paragraphChunks(cleaned, maxSectionChars)
     const pieces = primary.flatMap((section) =>
         splitOversizedSection(section, maxSectionChars),
     )
-    const idPrefix = baseId(sourceName) || "pdf"
 
     const sections = pieces
         .map((piece, index) => ({
@@ -151,11 +268,14 @@ export function splitPdfMarkdownIntoSections(
 export function pdfSectionToDetectedPassage(
     section: PdfMarkdownSection,
 ): DetectedPassage {
+    const questionType = section.questionType ?? "문서 핵심 흐름"
     return {
-        questionNumber: section.sectionIndex,
-        questionType: "문서 핵심 흐름",
+        questionNumber: section.questionNumber ?? section.sectionIndex,
+        questionType,
         koreanInstruction:
-            "PDF에서 MarkItDown으로 변환한 Markdown입니다. 문서의 핵심 흐름과 논리 전개를 보여주세요.",
+            section.questionNumber !== undefined
+                ? "PDF에서 MarkItDown으로 변환한 수능형 문항입니다. 발문과 지문을 바탕으로 문제별 핵심 흐름을 보여주세요."
+                : "PDF에서 MarkItDown으로 변환한 Markdown입니다. 문서의 핵심 흐름과 논리 전개를 보여주세요.",
         englishPassage: [
             `Source: ${section.sourceName}`,
             `Section: ${section.title}`,
