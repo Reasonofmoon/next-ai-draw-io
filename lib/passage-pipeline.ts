@@ -64,6 +64,15 @@ function typeSpecificGuidance(questionType: string): string {
                 "Arrow labels should name the logic, such as 'because', 'therefore',",
                 "'contrast', or 'leads to'.",
             ].join(" ")
+        case "문서 핵심 흐름":
+            return [
+                "TYPE: document core flow from Markdown.",
+                "STRUCTURE: identify the document section's central topic, then show",
+                "the strongest 4–6 logical moves as a clean flow: Context/Problem",
+                "→ Key evidence/details → Main point → Implication/next action.",
+                "Preserve important heading/table/list information only when it",
+                "changes the logical flow.",
+            ].join(" ")
         case "빈칸 추론":
             return [
                 "TYPE: fill-in-the-blank reasoning.",
@@ -139,7 +148,10 @@ function typeSpecificGuidance(questionType: string): string {
  * Combines shared style guide + type-specific structure + the passage text.
  */
 export function buildPassagePrompt(passage: DetectedPassage): string {
-    const header = `You are analyzing a CSAT English reading passage. Question type: ${passage.questionType}.`
+    const isPdfDocument = passage.questionType === "문서 핵심 흐름"
+    const header = isPdfDocument
+        ? `You are analyzing Markdown extracted from a PDF document. Diagram type: ${passage.questionType}.`
+        : `You are analyzing a CSAT English reading passage. Question type: ${passage.questionType}.`
     const guidance = typeSpecificGuidance(passage.questionType)
     const korean = passage.koreanInstruction
         ? `\nKorean instruction (context only, do NOT put Korean in the diagram): ${passage.koreanInstruction}`
@@ -154,11 +166,16 @@ export function buildPassagePrompt(passage: DetectedPassage): string {
         "TASK: Generate the mxCell elements for a draw.io diagram following the",
         "structure and style rules above. Output ONLY the mxCell XML (no mxfile",
         "wrapper — it will be added automatically).",
+        isPdfDocument
+            ? "For PDF Markdown documents, label nodes in the document's dominant language; use English only when the source is English or mixed."
+            : "",
         korean,
         "",
-        "Passage:",
+        isPdfDocument ? "Markdown:" : "Passage:",
         passage.englishPassage,
-    ].join("\n")
+    ]
+        .filter(Boolean)
+        .join("\n")
 }
 
 /**
