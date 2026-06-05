@@ -642,6 +642,7 @@ export default function PdfDiagramsPage() {
                                 </button>
                                 <button
                                     type="button"
+                                    data-testid="pdf-download-md-zip"
                                     style={button(
                                         "secondary",
                                         documents.every((doc) => !doc.markdown),
@@ -1303,7 +1304,7 @@ function downloadBytes(filename: string, bytes: Uint8Array, mime: string) {
     document.body.appendChild(a)
     a.click()
     a.remove()
-    URL.revokeObjectURL(url)
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function baseName(filename: string): string {
