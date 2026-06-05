@@ -113,7 +113,7 @@ export async function POST(req: Request): Promise<Response> {
             tools: {
                 display_diagram: {
                     description:
-                        "Display a diagram on draw.io. Pass ONLY the mxCell elements; wrapper tags are added automatically. Every mxCell needs unique id (start from '2') and parent='1'.",
+                        "Display a diagram on draw.io. Pass ONLY valid mxCell XML elements. Do not pass markdown, explanations, code fences, mxfile, root, graphModel, or XML declaration. Wrapper tags are added automatically. Every mxCell must have a unique id, use parent='1', and start ids from '2'. Vertex cells must include vertex='1' and mxGeometry with x, y, width, height, and as='geometry'. Edge cells must include edge='1', source and target ids, and mxGeometry with relative='1' and as='geometry'. Use orthogonal connectors and semantic colors from the prompt. Before calling the tool, ensure the fragment is valid XML and contains only mxCell elements.",
                     inputSchema: z.object({
                         xml: z
                             .string()

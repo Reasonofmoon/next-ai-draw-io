@@ -606,7 +606,9 @@ IMPORTANT: The "Current diagram XML" is the SINGLE SOURCE OF TRUTH for what's on
         tools: {
             // Client-side tool that will be executed on the client
             display_diagram: {
-                description: `Display a diagram on draw.io. Pass ONLY the mxCell elements - wrapper tags and root cells are added automatically.
+                description: `Display a diagram on draw.io. Pass ONLY valid mxCell XML elements.
+Do not pass markdown, explanations, code fences, mxfile, root, graphModel, or XML declaration.
+Wrapper tags and root cells are added automatically.
 
 VALIDATION RULES (XML will be rejected if violated):
 1. Generate ONLY mxCell elements - NO wrapper tags (<mxfile>, <mxGraphModel>, <root>)
@@ -614,7 +616,11 @@ VALIDATION RULES (XML will be rejected if violated):
 3. All mxCell elements must be siblings - never nested
 4. Every mxCell needs a unique id (start from "2")
 5. Every mxCell needs a valid parent attribute (use "1" for top-level)
-6. Escape special chars in values: &lt; &gt; &amp; &quot;
+6. Vertex cells must include vertex="1" and mxGeometry with x, y, width, height, and as="geometry"
+7. Edge cells must include edge="1", source and target ids, and mxGeometry with relative="1" and as="geometry"
+8. Use orthogonal connectors and semantic colors from the prompt
+9. Escape special chars in values: &lt; &gt; &amp; &quot;
+10. Before calling the tool, ensure the fragment is valid XML and contains only mxCell elements
 
 Example (generate ONLY this - no wrapper tags):
 <mxCell id="lane1" value="Frontend" style="swimlane;" vertex="1" parent="1">

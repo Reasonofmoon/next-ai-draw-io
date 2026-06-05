@@ -16,22 +16,66 @@ import { wrapWithMxFile } from "@/lib/utils"
  * across the whole HWP look consistent.
  */
 const STYLE_GUIDE = [
-    "=== VISUAL STYLE (required) ===",
-    "Colors (use fillColor + strokeColor):",
-    "  • Primary claim/topic  →  fillColor=#DBEAFE strokeColor=#1D4ED8  (blue)",
-    "  • Evidence/detail      →  fillColor=#D1FAE5 strokeColor=#047857  (green)",
-    "  • Counterpoint/gap     →  fillColor=#FEE2E2 strokeColor=#B91C1C  (red)",
-    "  • Example/illustration →  fillColor=#FEF3C7 strokeColor=#B45309  (amber)",
-    "  • Neutral/framing      →  fillColor=#F3F4F6 strokeColor=#374151  (gray)",
-    "  • Blank/placeholder    →  fillColor=#FFFFFF strokeColor=#9CA3AF strokeWidth=2 dashed=1",
-    "Shapes: rounded rectangles (rounded=1, arcSize=12). Stroke width 2.",
-    "Font: fontFamily=Helvetica, fontSize=13, align=center, verticalAlign=middle.",
-    "Arrows: endArrow=classic, strokeColor=#374151, labels concise (≤3 words). Prefer orthogonal connectors over messy diagonals.",
-    "Layout: 500–650 wide × 300–400 tall total. Generous spacing (≥24px gaps).",
-    "Keep every label in English, ≤8 words per box.",
-    "Make the composition presentation-ready: balanced alignment, consistent widths, no overlaps, no crowding, and a clear visual hierarchy.",
-    "For printability, use clean white space, strong contrast, and avoid excessive decoration.",
-    "Use 4–7 boxes in most cases. Fewer, clearer boxes are better than a crowded chart.",
+    "============================================================",
+    "VISUAL STYLE",
+    "============================================================",
+    "Colors must encode rhetorical function:",
+    "",
+    "Primary claim/topic:",
+    "  fillColor=#DBEAFE strokeColor=#1D4ED8",
+    "",
+    "Evidence/detail:",
+    "  fillColor=#D1FAE5 strokeColor=#047857",
+    "",
+    "Counterpoint/gap/tension:",
+    "  fillColor=#FEE2E2 strokeColor=#B91C1C",
+    "",
+    "Example/illustration:",
+    "  fillColor=#FEF3C7 strokeColor=#B45309",
+    "",
+    "Neutral/framing:",
+    "  fillColor=#F3F4F6 strokeColor=#374151",
+    "",
+    "Blank/placeholder:",
+    "  fillColor=#FFFFFF strokeColor=#9CA3AF strokeWidth=2 dashed=1",
+    "",
+    "Shapes:",
+    "  rounded rectangles only.",
+    "  Use rounded=1 and arcSize=12.",
+    "  Stroke width 2 by default.",
+    "",
+    "Font:",
+    "  fontFamily=Helvetica",
+    "  fontSize=13",
+    "  align=center",
+    "  verticalAlign=middle",
+    "",
+    "Edges:",
+    "  Use orthogonal connectors.",
+    "  endArrow=classic",
+    "  strokeColor=#374151",
+    "  Arrow labels must be concise, maximum 3 words.",
+    "  Prefer logic labels:",
+    "    because, therefore, but, however, supports, explains,",
+    "    causes, reveals, contrasts, leads to, enables.",
+    "",
+    "Layout:",
+    "  total diagram about 500–650 wide and 300–400 tall.",
+    "  generous spacing, minimum 24 px gaps.",
+    "  balanced alignment.",
+    "  no overlaps.",
+    "  no crowding.",
+    "  clear visual hierarchy.",
+    "  use 4–7 boxes in most cases.",
+    "  fewer, clearer boxes are better.",
+    "",
+    "Labels:",
+    "  Use English only for ordinary CSAT English passages.",
+    "  Do not put Korean in ordinary CSAT English diagrams.",
+    "  Each box label must be maximum 8 words.",
+    "  Use compressed meaning, not copied full sentences.",
+    "  Avoid vague labels such as Detail, Point, Conclusion.",
+    "  Make labels conceptually useful.",
 ].join("\n")
 
 /**
@@ -41,104 +85,143 @@ const STYLE_GUIDE = [
 function typeSpecificGuidance(questionType: string): string {
     switch (questionType) {
         case "주제":
+            return [
+                "TYPE: topic.",
+                "VISUAL GOAL: show the subject area and the controlling idea.",
+                "STRUCTURE: Use a compact concept map: Broad Topic (neutral) →",
+                "Focused Aspect (evidence) → Controlling Idea (primary, bold).",
+                "Add 1–2 evidence/example boxes only if they clarify the topic.",
+                "Do not make the topic too broad. Do not copy a full sentence.",
+            ].join(" ")
         case "제목":
             return [
-                "TYPE: topic/title identification.",
-                "STRUCTURE: one central box (primary color) for the topic, 3–5 surrounding",
-                "boxes (evidence color) for supporting points radiating out. Arrows point",
-                "FROM supporting TO central (they support the topic).",
+                "TYPE: title selection.",
+                "VISUAL GOAL: show the best title as a synthesis of topic and claim.",
+                "STRUCTURE: Use a pyramid-like layout: Details/Examples at bottom →",
+                "Core Contrast or Mechanism in middle → Best Title Idea at top or center.",
+                "The title box must be primary and bold. Use 3–5 support boxes.",
+                "The title idea should sound like a concise conceptual headline.",
             ].join(" ")
         case "요지":
             return [
-                "TYPE: main-idea / author's claim.",
-                "STRUCTURE: top-to-bottom — Context (neutral) → Claim (primary, bold) → ",
-                "2–3 Supporting reasons (evidence) → Implication/restatement (primary).",
+                "TYPE: main idea.",
+                "VISUAL GOAL: compress the whole passage into one central claim supported by key reasons.",
+                "STRUCTURE: Topic Frame (neutral) → Key Reason 1 (evidence) →",
+                "Main Idea (primary, bold) ← Key Reason 2 (evidence).",
+                "If the passage corrects a misconception, include Common Belief",
+                "(counterpoint) → Correction (primary). Main idea must be most prominent.",
             ].join(" ")
         case "핵심 흐름":
             return [
                 "TYPE: core discourse flow.",
-                "STRUCTURE: left-to-right chain showing the passage's essential logic:",
-                "Context/Problem (neutral) → Key observation (evidence) → Main claim",
-                "(primary, bold) → Consequence/implication (primary). Add one",
-                "counterpoint/tension box only if the passage clearly pivots.",
-                "Arrow labels should name the logic, such as 'because', 'therefore',",
-                "'contrast', or 'leads to'.",
+                "VISUAL GOAL: reveal the passage's main reasoning spine.",
+                "STRUCTURE: Create a left-to-right logic chain with 4–6 boxes:",
+                "Context or Issue (neutral) → Tension / Key Observation",
+                "(evidence or counterpoint) → Main Claim (primary, bold) →",
+                "Reason / Mechanism (evidence) → Implication or Takeaway (primary).",
+                "Use a red counterpoint/tension box only if the passage clearly pivots.",
+                "Arrow labels should show logic: because, therefore, however,",
+                "reveals, leads to, explains.",
             ].join(" ")
         case "문서 핵심 흐름":
             return [
                 "TYPE: document core flow from Markdown.",
-                "STRUCTURE: identify the document section's central topic, then show",
-                "the strongest 4–6 logical moves as a clean flow: Context/Problem",
-                "→ Key evidence/details → Main point → Implication/next action.",
-                "Preserve important heading/table/list information only when it",
-                "changes the logical flow.",
+                "VISUAL GOAL: show section-level conceptual flow, not paragraph notes.",
+                "STRUCTURE: choose the best layout: Argument flow, Report flow,",
+                "Process flow, Comparison flow, or Concept map. Prefer 5–8 boxes",
+                "for longer documents. Use only highest-level ideas and merge repeated details.",
             ].join(" ")
         case "빈칸 추론":
             return [
                 "TYPE: fill-in-the-blank reasoning.",
-                "STRUCTURE: linear flow — Setup (neutral) → [BLANK] (placeholder style,",
-                "dashed, WHITE bg) → Consequence (primary). Include 1–2 evidence boxes",
-                "branching into the blank showing what it must be. Label arrow to blank",
-                "'leads to ___'.",
+                "VISUAL GOAL: show what the blank must logically complete.",
+                "STRUCTURE: Use a reasoning funnel: Setup / Context (neutral) →",
+                "Constraint 1 (evidence) → [BLANK] (placeholder, dashed, white) →",
+                "Consequence / Completed Meaning (primary). Add Constraint 2 as",
+                "a branch into the blank if needed. The boxes before the blank",
+                "should show logical pressure; the box after should show why it matters.",
+                "Arrow labels: requires, leads to ___, therefore, explains.",
             ].join(" ")
         case "순서 배열":
             return [
                 "TYPE: paragraph sequencing.",
-                "STRUCTURE: 4 boxes left-to-right labeled (Given) → (A) → (B) → (C) with",
-                "thick arrows. Each box contains a 5-word summary of that chunk.",
+                "VISUAL GOAL: show the correct logical order, not the original listed order.",
+                "STRUCTURE: Create 4 boxes in the inferred correct sequence:",
+                "(Given) → next paragraph → next paragraph → final paragraph.",
+                "Each label must begin with (Given), (A), (B), or (C), then a",
+                "maximum 5-word summary. Arrow labels should show why each follows:",
+                "introduces, explains, contrasts, result, example, conclusion.",
             ].join(" ")
         case "문장 위치":
             return [
                 "TYPE: sentence insertion.",
-                "STRUCTURE: linear 4–5 box timeline with one GAP box (dashed, labeled",
-                "'INSERT HERE') at the best position. Show logical break before and",
-                "continuation after.",
+                "VISUAL GOAL: show the logical gap where the inserted sentence belongs.",
+                "STRUCTURE: Create a 4–5 box timeline: Before-context → Logical gap →",
+                "INSERT HERE (dashed) → After-context → Continuation / Result.",
+                "Use red if the insertion resolves contrast or a break; evidence color",
+                "if it supplies missing support. Arrow labels: refers back, therefore,",
+                "however, resumes, explains.",
             ].join(" ")
         case "함축 의미":
             return [
-                "TYPE: implied-meaning (underlined phrase).",
-                "STRUCTURE: three layers — Literal wording (neutral) → Surface meaning",
-                "(evidence) → Implied meaning (primary, bold). Arrows represent 'means'.",
+                "TYPE: implied meaning.",
+                "VISUAL GOAL: reveal movement from literal wording to deeper implication.",
+                "STRUCTURE: Literal Phrase (neutral) → Local Context (evidence) →",
+                "Hidden Contrast / Assumption (counterpoint if present) →",
+                "Implied Meaning (primary, bold). The final box must state the inferred",
+                "meaning, not just a paraphrase. Arrow labels: means, in context, implies.",
             ].join(" ")
         case "심경/분위기":
             return [
                 "TYPE: mood / emotion shift.",
-                "STRUCTURE: horizontal timeline with 3–4 boxes showing emotional state",
-                "at each stage (neutral → neutral → primary). Use emoji-style text if",
-                "natural (e.g., 'anxious' → 'relieved'). Label arrows with trigger event.",
+                "VISUAL GOAL: show how emotion changes over time and what causes the shift.",
+                "STRUCTURE: Create a horizontal timeline with 3–4 emotional states.",
+                "Each box should contain Stage + Emotion, e.g. Initial Anxiety,",
+                "Growing Relief, Quiet Confidence. Use arrow labels for triggers.",
+                "Use primary color for the final dominant mood; red for reversal/tension.",
             ].join(" ")
         case "목적":
             return [
                 "TYPE: writer's purpose.",
-                "STRUCTURE: central box for PURPOSE (primary, bold) at center, ",
-                "3–4 supporting-detail boxes (evidence) pointing INTO it, all labeled",
-                "with the specific signal (e.g., 'polite request', 'deadline', 'contact').",
+                "VISUAL GOAL: show how details converge on the author's communicative purpose.",
+                "STRUCTURE: Use a hub-and-spoke layout. Place central PURPOSE box",
+                "in primary color and bold style. Add 3–4 surrounding boxes pointing inward:",
+                "Audience / Situation, Problem or Need, Key Information, Requested Action.",
+                "The central purpose should be an infinitive phrase when possible.",
             ].join(" ")
         case "무관한 문장":
             return [
                 "TYPE: identify unrelated sentence.",
-                "STRUCTURE: 5 sequential boxes labeled ①②③④⑤, with the unrelated one",
-                "using COUNTERPOINT color (red) and a dashed 'off-topic' label.",
+                "VISUAL GOAL: show the topic chain and the sentence that breaks it.",
+                "STRUCTURE: Create 5 sequential boxes labeled ① ② ③ ④ ⑤.",
+                "Each box contains a maximum 5-word idea summary. Use red counterpoint",
+                "and dashed style for the unrelated sentence. Add arrow label off-topic",
+                "or breaks chain. Show why it does not belong.",
             ].join(" ")
         case "요약":
             return [
                 "TYPE: passage summary.",
-                "STRUCTURE: left column 3 detail boxes (evidence) → middle SYNTHESIS",
-                "box (primary, bold, larger) → right column 2-slot result showing the",
-                "two blanks of the summary sentence.",
+                "VISUAL GOAL: show how key details synthesize into the summary.",
+                "STRUCTURE: left column 3 key details (evidence) → middle SYNTHESIS",
+                "box (primary, bold) → right column showing summary result or blanks.",
+                "Merge repeated details and show only answer-relevant relationships.",
             ].join(" ")
         case "어법/어휘":
             return [
-                "TYPE: grammar/vocabulary.",
-                "STRUCTURE: tree diagram — parent sentence box, children for each",
-                "tested item (neutral), one highlighted counterpoint for the error.",
+                "TYPE: grammar/vocabulary in context.",
+                "VISUAL GOAL: show the relation that determines correctness or fit.",
+                "STRUCTURE: For grammar, use Sentence Context → Grammar Trigger →",
+                "Required Form, with a red competing form if useful. For vocabulary,",
+                "use Context Mood/Situation → Meaning Constraint → Target Meaning →",
+                "Contextual Fit/Mismatch. Labels should name functions, not rules.",
             ].join(" ")
         default:
             return [
-                "TYPE: general discourse flow.",
-                "STRUCTURE: 3–6 boxes connected by labeled arrows showing the passage's",
-                "logical progression. Use primary color for main claim, evidence color",
-                "for support, counterpoint for tension.",
+                "TYPE: general reading reasoning.",
+                "VISUAL GOAL: reveal the passage's most answer-relevant logic.",
+                "STRUCTURE: Use the best-fitting structure: core flow, contrast-resolution,",
+                "cause-effect, problem-solution, or claim-support. Use 4–7 boxes.",
+                "Make the main claim or answer-relevant idea visually prominent.",
             ].join(" ")
     }
 }
@@ -149,29 +232,93 @@ function typeSpecificGuidance(questionType: string): string {
  */
 export function buildPassagePrompt(passage: DetectedPassage): string {
     const isPdfDocument = passage.questionType === "문서 핵심 흐름"
-    const header = isPdfDocument
-        ? `You are analyzing Markdown extracted from a PDF document. Diagram type: ${passage.questionType}.`
-        : `You are analyzing a CSAT English reading passage. Question type: ${passage.questionType}.`
     const guidance = typeSpecificGuidance(passage.questionType)
-    const korean = passage.koreanInstruction
-        ? `\nKorean instruction (context only, do NOT put Korean in the diagram): ${passage.koreanInstruction}`
-        : ""
+    if (isPdfDocument) {
+        return [
+            "You are analyzing Markdown extracted from a PDF document.",
+            "",
+            "Diagram type: document core flow.",
+            "",
+            "The goal is to create a visual-thinking map of the document's essential structure.",
+            "Do not summarize every paragraph.",
+            "Do not create a table of contents.",
+            "Show the conceptual flow:",
+            "- background or problem,",
+            "- key sections or claims,",
+            "- supporting evidence,",
+            "- contrast or limitation,",
+            "- conclusion, recommendation, or implication.",
+            "",
+            "For PDF Markdown documents, label nodes in the document's dominant language.",
+            "Use English only when the source is English or mixed.",
+            "If the source is mostly Korean, Korean labels are allowed.",
+            "If the source is mostly English, use English labels.",
+            "",
+            "============================================================",
+            "DOCUMENT STRUCTURE RULES",
+            "============================================================",
+            guidance,
+            "",
+            STYLE_GUIDE,
+            "",
+            "============================================================",
+            "TASK",
+            "============================================================",
+            "Generate draw.io mxCell elements that visualize the document's core flow.",
+            "",
+            "Output ONLY the mxCell XML fragment.",
+            "Do NOT output markdown.",
+            "Do NOT output explanations.",
+            "Do NOT output code fences.",
+            "Do NOT output mxfile, root, graphModel, or XML declaration.",
+            "",
+            "Markdown:",
+            passage.englishPassage,
+        ].join("\n")
+    }
+
+    const koreanInstruction = passage.koreanInstruction || ""
     return [
-        header,
+        "You are analyzing a CSAT English reading passage.",
         "",
+        `Question type: ${passage.questionType}`,
+        "",
+        "The goal is to create a visual-thinking map, not a decorative summary.",
+        "The diagram must help a student quickly see:",
+        "- what the passage is mainly about,",
+        "- how the ideas move,",
+        "- where the logic turns,",
+        "- which details support the answer,",
+        "- why the final claim or inference follows.",
+        "",
+        "============================================================",
+        "QUESTION-TYPE STRUCTURE",
+        "============================================================",
         guidance,
         "",
         STYLE_GUIDE,
         "",
-        "TASK: Generate the mxCell elements for a draw.io diagram following the",
-        "structure and style rules above. Output ONLY the mxCell XML (no mxfile",
-        "wrapper — it will be added automatically).",
-        isPdfDocument
-            ? "For PDF Markdown documents, label nodes in the document's dominant language; use English only when the source is English or mixed."
-            : "",
-        korean,
+        "============================================================",
+        "TASK",
+        "============================================================",
         "",
-        isPdfDocument ? "Markdown:" : "Passage:",
+        "Generate draw.io mxCell elements that visualize the passage's core reasoning.",
+        "",
+        "Output ONLY the mxCell XML fragment.",
+        "Do NOT output markdown.",
+        "Do NOT output explanations.",
+        "Do NOT output code fences.",
+        "Do NOT output mxfile, root, graphModel, or XML declaration.",
+        "The wrapper will be added automatically.",
+        "",
+        "Korean instruction for context only.",
+        "Use it only to understand the task.",
+        "Do NOT put Korean in the diagram.",
+        "",
+        "Korean instruction:",
+        koreanInstruction,
+        "",
+        "Passage:",
         passage.englishPassage,
     ]
         .filter(Boolean)
