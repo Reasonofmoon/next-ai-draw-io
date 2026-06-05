@@ -186,4 +186,22 @@ describe("splitPdfMarkdownIntoSections", () => {
         ).toEqual([18, 19])
         expect(result.warnings[0]).toContain("Parsed pasted/plain text")
     })
+
+    it("uses question numbers for short pasted plain-text items", () => {
+        const text = [
+            "18. Purpose question",
+            "A notice explains that students should move to a temporary classroom because repairs will begin in the library next week.",
+            "",
+            "19. Topic question",
+            "Readers understand a difficult idea better when they connect it to examples, compare it with familiar cases, and restate the conclusion.",
+        ].join("\n")
+
+        const result = splitTextIntoDiagramSections(text, "pasted-text.txt")
+
+        expect(result.sections).toHaveLength(2)
+        expect(result.sections.map((section) => section.title)).toEqual([
+            "Q18 · 핵심 흐름",
+            "Q19 · 핵심 흐름",
+        ])
+    })
 })

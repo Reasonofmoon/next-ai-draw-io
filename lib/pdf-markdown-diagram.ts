@@ -57,7 +57,10 @@ function headingSections(
 
 function questionSections(
     markdown: string,
-    minQuestionChars: number,
+    options: {
+        minQuestionChars: number
+        allowQuestionMarkerOnly?: boolean
+    },
 ): Array<{
     questionNumber: number
     questionType: string
@@ -84,7 +87,7 @@ function questionSections(
         const nextIndex = broadMarkers[idx + 1]?.index ?? markdown.length
         return isLikelyQuestionSegment(
             markdown.slice(marker.index, nextIndex),
-            minQuestionChars,
+            options,
         )
     })
     if (activeMarkers.length < 2) return []
@@ -116,10 +119,14 @@ function questionSections(
 
 function isLikelyQuestionSegment(
     text: string,
-    minQuestionChars: number,
+    options: {
+        minQuestionChars: number
+        allowQuestionMarkerOnly?: boolean
+    },
 ): boolean {
     const normalized = text.replace(/\s+/g, " ").trim()
-    if (normalized.length < minQuestionChars) return false
+    if (normalized.length < options.minQuestionChars) return false
+    if (options.allowQuestionMarkerOnly) return true
     if (
         /다음\s*글|글의|목적|심경|분위기|주제|제목|빈칸|밑줄|어법|어휘|요지|요약|순서|주어진|함축|무관|낱말|문장|흐름/i.test(
             normalized,
@@ -230,6 +237,7 @@ export function splitPdfMarkdownIntoSections(
         maxSectionChars?: number
         minSectionChars?: number
         minQuestionChars?: number
+        allowQuestionMarkerOnly?: boolean
     } = {},
 ): PdfMarkdownSplitResult {
     const maxSectionChars = options.maxSectionChars ?? DEFAULT_MAX_SECTION_CHARS
@@ -243,7 +251,10 @@ export function splitPdfMarkdownIntoSections(
     }
 
     const idPrefix = baseId(sourceName) || "pdf"
-    const questions = questionSections(cleaned, minQuestionChars)
+    const questions = questionSections(cleaned, {
+        minQuestionChars,
+        allowQuestionMarkerOnly: options.allowQuestionMarkerOnly,
+    })
 
     if (questions.length > 0) {
         const sections = questions.map((question, index) => {
@@ -353,6 +364,7 @@ export function splitTextIntoDiagramSections(
     const result = splitPdfMarkdownIntoSections(text, sourceName, {
         minSectionChars: 40,
         minQuestionChars: 40,
+        allowQuestionMarkerOnly: true,
     })
     return {
         sections: result.sections,
