@@ -55,7 +55,10 @@ function headingSections(
     })
 }
 
-function questionSections(markdown: string): Array<{
+function questionSections(
+    markdown: string,
+    minQuestionChars: number,
+): Array<{
     questionNumber: number
     questionType: string
     title: string
@@ -79,7 +82,10 @@ function questionSections(markdown: string): Array<{
         englishExamMarkers.length >= 2 ? englishExamMarkers : rawMarkers
     const activeMarkers = broadMarkers.filter((marker, idx) => {
         const nextIndex = broadMarkers[idx + 1]?.index ?? markdown.length
-        return isLikelyQuestionSegment(markdown.slice(marker.index, nextIndex))
+        return isLikelyQuestionSegment(
+            markdown.slice(marker.index, nextIndex),
+            minQuestionChars,
+        )
     })
     if (activeMarkers.length < 2) return []
 
@@ -108,9 +114,12 @@ function questionSections(markdown: string): Array<{
     )
 }
 
-function isLikelyQuestionSegment(text: string): boolean {
+function isLikelyQuestionSegment(
+    text: string,
+    minQuestionChars: number,
+): boolean {
     const normalized = text.replace(/\s+/g, " ").trim()
-    if (normalized.length < 120) return false
+    if (normalized.length < minQuestionChars) return false
     if (
         /다음\s*글|글의|목적|심경|분위기|주제|제목|빈칸|밑줄|어법|어휘|요지|요약|순서|주어진|함축|무관|낱말|문장|흐름/i.test(
             normalized,
@@ -220,10 +229,12 @@ export function splitPdfMarkdownIntoSections(
     options: {
         maxSectionChars?: number
         minSectionChars?: number
+        minQuestionChars?: number
     } = {},
 ): PdfMarkdownSplitResult {
     const maxSectionChars = options.maxSectionChars ?? DEFAULT_MAX_SECTION_CHARS
     const minSectionChars = options.minSectionChars ?? DEFAULT_MIN_SECTION_CHARS
+    const minQuestionChars = options.minQuestionChars ?? 120
     const cleaned = cleanMarkdown(markdown)
     const warnings: string[] = []
 
@@ -232,7 +243,7 @@ export function splitPdfMarkdownIntoSections(
     }
 
     const idPrefix = baseId(sourceName) || "pdf"
-    const questions = questionSections(cleaned)
+    const questions = questionSections(cleaned, minQuestionChars)
 
     if (questions.length > 0) {
         const sections = questions.map((question, index) => {
@@ -333,6 +344,23 @@ export function splitCsvIntoDiagramSections(
     }
 
     return { sections, warnings }
+}
+
+export function splitTextIntoDiagramSections(
+    text: string,
+    sourceName: string,
+): PdfMarkdownSplitResult {
+    const result = splitPdfMarkdownIntoSections(text, sourceName, {
+        minSectionChars: 40,
+        minQuestionChars: 40,
+    })
+    return {
+        sections: result.sections,
+        warnings: [
+            `Parsed pasted/plain text into ${result.sections.length} diagram section(s).`,
+            ...result.warnings,
+        ],
+    }
 }
 
 export function splitJsonIntoDiagramSections(

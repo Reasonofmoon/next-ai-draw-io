@@ -5,6 +5,7 @@ import {
     splitCsvIntoDiagramSections,
     splitJsonIntoDiagramSections,
     splitPdfMarkdownIntoSections,
+    splitTextIntoDiagramSections,
 } from "@/lib/pdf-markdown-diagram"
 
 describe("splitPdfMarkdownIntoSections", () => {
@@ -166,5 +167,23 @@ describe("splitPdfMarkdownIntoSections", () => {
             questionType: "요지",
         })
         expect(result.sections[1].title).toBe("Vocabulary item")
+    })
+
+    it("turns pasted text into diagram sections", () => {
+        const text = [
+            "18. 다음 글의 목적으로 가장 적절한 것은?",
+            "A notice explains that students should move to a temporary classroom because repairs will begin in the library next week.",
+            "",
+            "19. 다음 글의 주제로 가장 적절한 것은?",
+            "Readers understand a difficult idea better when they connect it to examples, compare it with familiar cases, and restate the conclusion.",
+        ].join("\n")
+
+        const result = splitTextIntoDiagramSections(text, "pasted-text.txt")
+
+        expect(result.sections).toHaveLength(2)
+        expect(
+            result.sections.map((section) => section.questionNumber),
+        ).toEqual([18, 19])
+        expect(result.warnings[0]).toContain("Parsed pasted/plain text")
     })
 })

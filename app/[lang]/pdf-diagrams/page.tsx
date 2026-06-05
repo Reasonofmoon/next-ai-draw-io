@@ -24,6 +24,7 @@ import {
     splitCsvIntoDiagramSections,
     splitJsonIntoDiagramSections,
     splitPdfMarkdownIntoSections,
+    splitTextIntoDiagramSections,
 } from "@/lib/pdf-markdown-diagram"
 import { T } from "@/lib/workbench-tokens"
 
@@ -168,6 +169,20 @@ const dropZone = {
     textAlign: "center",
 } as const
 
+const textarea = {
+    width: "100%",
+    minHeight: 170,
+    resize: "vertical",
+    border: `1px solid ${T.paper300}`,
+    borderRadius: 8,
+    background: "#fff",
+    color: T.ink900,
+    padding: 12,
+    fontFamily: T.fontMono,
+    fontSize: 12,
+    lineHeight: 1.55,
+} as const
+
 const tableWrap = {
     overflowX: "auto",
     border: `1px solid ${T.paper300}`,
@@ -214,6 +229,7 @@ export default function PdfDiagramsPage() {
     )
     const [isConverting, setIsConverting] = useState(false)
     const [isRunning, setIsRunning] = useState(false)
+    const [pastedText, setPastedText] = useState("")
     const rendererRef = useRef<DrawioPngRenderer | null>(null)
 
     const sections = useMemo(
@@ -283,6 +299,29 @@ export default function PdfDiagramsPage() {
         }
 
         setIsConverting(false)
+    }
+
+    const handlePastedText = () => {
+        const text = pastedText.trim()
+        if (text.length === 0 || isConverting) return
+
+        const split = splitTextIntoDiagramSections(text, "pasted-text.txt")
+        const document: PdfDocument = {
+            id: `pasted-text-${Date.now()}`,
+            filename: "pasted-text.txt",
+            status: split.sections.length > 0 ? "ready" : "error",
+            markdown: text,
+            engine: "pasted-text-parser",
+            sections: split.sections,
+            warnings: split.warnings,
+            error:
+                split.sections.length > 0
+                    ? undefined
+                    : "붙여넣은 텍스트에서 다이어그램 섹션을 찾지 못했습니다.",
+        }
+        setDocuments([document])
+        setResults(new Map())
+        setSelectedIds(new Set(split.sections.map((section) => section.id)))
     }
 
     const toggleSelection = (id: string) => {
@@ -395,8 +434,8 @@ export default function PdfDiagramsPage() {
                             }}
                         >
                             PDF는 MarkItDown으로 Markdown 변환하고, CSV/JSON은
-                            문항 데이터로 읽어 문제별 다이어그램을 배치
-                            생성합니다.
+                            문항 데이터로 읽습니다. TXT 붙여넣기도 문제별
+                            다이어그램으로 배치 생성합니다.
                         </p>
                     </div>
                     <div style={toolbar}>
@@ -423,7 +462,7 @@ export default function PdfDiagramsPage() {
                             파일 업로드
                             <input
                                 type="file"
-                                accept="application/pdf,.pdf,text/csv,.csv,application/json,.json"
+                                accept="application/pdf,.pdf,text/csv,.csv,application/json,.json,text/plain,.txt,.md,.markdown"
                                 multiple
                                 disabled={isConverting}
                                 style={{ display: "none" }}
@@ -472,7 +511,8 @@ export default function PdfDiagramsPage() {
                                     }}
                                 />
                                 <div style={{ fontWeight: 800 }}>
-                                    PDF를 업로드하거나 여기로 끌어오세요
+                                    PDF, CSV, JSON, TXT를 업로드하거나
+                                    끌어오세요
                                 </div>
                                 <div
                                     style={{
@@ -481,7 +521,55 @@ export default function PdfDiagramsPage() {
                                         marginTop: 6,
                                     }}
                                 >
-                                    PDF, CSV, JSON을 파일당 25MB까지 처리합니다.
+                                    PDF, CSV, JSON, TXT를 파일당 25MB까지
+                                    처리합니다.
+                                </div>
+                            </div>
+
+                            <div style={{ marginTop: 16 }}>
+                                <textarea
+                                    data-testid="paste-textarea"
+                                    value={pastedText}
+                                    onChange={(event) =>
+                                        setPastedText(event.target.value)
+                                    }
+                                    placeholder="여기에 수능 지문 텍스트, Markdown, 문제 목록을 붙여넣으세요."
+                                    style={textarea}
+                                    spellCheck={false}
+                                />
+                                <div
+                                    style={{
+                                        ...toolbar,
+                                        marginTop: 10,
+                                        justifyContent: "space-between",
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            color: T.ink500,
+                                            fontSize: 12,
+                                        }}
+                                    >
+                                        {pastedText.length.toLocaleString()}{" "}
+                                        chars
+                                    </span>
+                                    <button
+                                        type="button"
+                                        data-testid="process-pasted-text"
+                                        style={button(
+                                            "primary",
+                                            pastedText.trim().length === 0 ||
+                                                isConverting,
+                                        )}
+                                        disabled={
+                                            pastedText.trim().length === 0 ||
+                                            isConverting
+                                        }
+                                        onClick={handlePastedText}
+                                    >
+                                        <FileText size={16} />
+                                        붙여넣은 텍스트 처리
+                                    </button>
                                 </div>
                             </div>
 
@@ -978,7 +1066,12 @@ function Empty({ text }: { text: string }) {
 function isSupportedInputFile(file: File): boolean {
     const name = file.name.toLowerCase()
     return (
-        name.endsWith(".pdf") || name.endsWith(".csv") || name.endsWith(".json")
+        name.endsWith(".pdf") ||
+        name.endsWith(".csv") ||
+        name.endsWith(".json") ||
+        name.endsWith(".txt") ||
+        name.endsWith(".md") ||
+        name.endsWith(".markdown")
     )
 }
 
@@ -1000,6 +1093,20 @@ async function convertInputFile(file: File): Promise<ConvertedInput> {
         return {
             markdown,
             engine: "json-question-parser",
+            sections: split.sections,
+            warnings: split.warnings,
+        }
+    }
+    if (
+        name.endsWith(".txt") ||
+        name.endsWith(".md") ||
+        name.endsWith(".markdown")
+    ) {
+        const markdown = await file.text()
+        const split = splitTextIntoDiagramSections(markdown, file.name)
+        return {
+            markdown,
+            engine: "text-question-parser",
             sections: split.sections,
             warnings: split.warnings,
         }
