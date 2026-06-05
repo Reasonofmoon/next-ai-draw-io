@@ -230,6 +230,7 @@ export default function PdfDiagramsPage() {
     const [isConverting, setIsConverting] = useState(false)
     const [isRunning, setIsRunning] = useState(false)
     const [pastedText, setPastedText] = useState("")
+    const [zipSaveMessage, setZipSaveMessage] = useState<string | null>(null)
     const rendererRef = useRef<DrawioPngRenderer | null>(null)
 
     const sections = useMemo(
@@ -375,7 +376,7 @@ export default function PdfDiagramsPage() {
         }
     }
 
-    const downloadMarkdownZip = () => {
+    const downloadMarkdownZip = async () => {
         const encoder = new TextEncoder()
         const files = documents
             .filter((doc) => doc.markdown)
@@ -384,14 +385,13 @@ export default function PdfDiagramsPage() {
                 data: encoder.encode(doc.markdown),
             }))
         if (files.length === 0) return
-        downloadBytes(
-            `markitdown-markdown-${Date.now()}.zip`,
-            makeZip(files),
-            "application/zip",
-        )
+        const filename = `markitdown-markdown-${Date.now()}.zip`
+        const zipBytes = makeZip(files)
+        downloadBytes(filename, zipBytes, "application/zip")
+        await saveZipLocally(filename, zipBytes, setZipSaveMessage)
     }
 
-    const downloadDiagramZip = () => {
+    const downloadDiagramZip = async () => {
         const encoder = new TextEncoder()
         const files: Array<{ name: string; data: Uint8Array }> = []
         for (const section of sections) {
@@ -411,11 +411,10 @@ export default function PdfDiagramsPage() {
             }
         }
         if (files.length === 0) return
-        downloadBytes(
-            `pdf-flow-diagrams-${Date.now()}.zip`,
-            makeZip(files),
-            "application/zip",
-        )
+        const filename = `pdf-flow-diagrams-${Date.now()}.zip`
+        const zipBytes = makeZip(files)
+        downloadBytes(filename, zipBytes, "application/zip")
+        await saveZipLocally(filename, zipBytes, setZipSaveMessage)
     }
 
     return (
@@ -650,7 +649,7 @@ export default function PdfDiagramsPage() {
                                     disabled={documents.every(
                                         (doc) => !doc.markdown,
                                     )}
-                                    onClick={downloadMarkdownZip}
+                                    onClick={() => void downloadMarkdownZip()}
                                 >
                                     <Download size={16} />
                                     MD ZIP
@@ -663,12 +662,26 @@ export default function PdfDiagramsPage() {
                                         completedCount === 0,
                                     )}
                                     disabled={completedCount === 0}
-                                    onClick={downloadDiagramZip}
+                                    onClick={() => void downloadDiagramZip()}
                                 >
                                     <Download size={16} />
                                     Diagram ZIP
                                 </button>
                             </div>
+
+                            {zipSaveMessage && (
+                                <div
+                                    style={{
+                                        marginTop: 10,
+                                        color: T.ink500,
+                                        fontSize: 12,
+                                        lineHeight: 1.5,
+                                        wordBreak: "break-all",
+                                    }}
+                                >
+                                    {zipSaveMessage}
+                                </div>
+                            )}
 
                             <div style={{ marginTop: 16, ...tableWrap }}>
                                 <table
@@ -1305,6 +1318,62 @@ function downloadBytes(filename: string, bytes: Uint8Array, mime: string) {
     a.click()
     a.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function saveZipLocally(
+    filename: string,
+    bytes: Uint8Array,
+    setMessage: (message: string | null) => void,
+) {
+    if (!isLocalHost()) return
+
+    setMessage("ZIP을 로컬 exports/pdf-diagrams 폴더에 저장하는 중입니다...")
+    try {
+        const res = await fetch("/api/save-pdf-diagram-zip", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                filename,
+                zipBase64: bytesToBase64(bytes),
+            }),
+        })
+        const data = (await res.json().catch(() => null)) as {
+            success?: boolean
+            path?: string
+            bytes?: number
+            error?: string
+        } | null
+
+        if (!res.ok || !data?.success || !data.path) {
+            setMessage(`로컬 저장 실패: ${data?.error ?? res.statusText}`)
+            return
+        }
+
+        setMessage(
+            `로컬 저장 완료: ${data.path} (${(data.bytes ?? bytes.length).toLocaleString()} bytes)`,
+        )
+    } catch (err) {
+        setMessage(
+            `로컬 저장 실패: ${err instanceof Error ? err.message : String(err)}`,
+        )
+    }
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+    let binary = ""
+    const chunkSize = 0x8000
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+    }
+    return btoa(binary)
+}
+
+function isLocalHost(): boolean {
+    return (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        window.location.hostname === "::1"
+    )
 }
 
 function baseName(filename: string): string {

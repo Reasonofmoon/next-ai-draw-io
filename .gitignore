@@ -77,6 +77,8 @@ ai-models.json
 *.bak
 .gstack/
 .tmp-downloads/
+.codex-logs/
+exports/
 
 # Local test fixtures (copyrighted material)
 test-data/
