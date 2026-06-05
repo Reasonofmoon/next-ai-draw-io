@@ -9,6 +9,7 @@ export interface PdfMarkdownSection {
     sectionIndex: number
     charCount: number
     questionNumber?: number
+    questionLabel?: string
     questionType?: string
 }
 
@@ -55,6 +56,33 @@ function headingSections(
     })
 }
 
+interface QuestionMarker {
+    index: number
+    number: number
+    rangeEnd?: number
+    label: string
+}
+
+function collapseRangeChildMarkers(
+    markers: QuestionMarker[],
+): QuestionMarker[] {
+    const collapsed: QuestionMarker[] = []
+    let coveredRangeEnd = 0
+
+    for (const marker of markers) {
+        if (marker.rangeEnd === undefined && marker.number <= coveredRangeEnd) {
+            continue
+        }
+
+        collapsed.push(marker)
+        if (marker.rangeEnd !== undefined) {
+            coveredRangeEnd = Math.max(coveredRangeEnd, marker.rangeEnd)
+        }
+    }
+
+    return collapsed
+}
+
 function questionSections(
     markdown: string,
     options: {
@@ -63,28 +91,40 @@ function questionSections(
     },
 ): Array<{
     questionNumber: number
+    questionLabel: string
     questionType: string
     title: string
     text: string
 }> {
     const rawMarkers = [
         ...markdown.matchAll(
-            /(?:^|\n)\s*(?:#{1,6}\s*)?(?:(?:Q|문항)\s*)?([1-9]\d?)\s*(?:[.)]\s*|\n)(?=\S)/g,
+            /(?:^|\n)\s*(?:#{1,6}\s*)?[[(]?(?:(?:Q|문항)\s*)?([1-9]\d?)\s*(?:[-~–]\s*([1-9]\d?))?[\])]?\s*(?:[.)]\s*|\n|\s+)(?=\S)/g,
         ),
     ]
-        .map((match) => ({
-            index: match.index ?? 0,
-            number: Number.parseInt(match[1] ?? "", 10),
-        }))
+        .map((match) => {
+            const number = Number.parseInt(match[1] ?? "", 10)
+            const rangeEnd = Number.parseInt(match[2] ?? "", 10)
+            const hasRange = Number.isFinite(rangeEnd) && rangeEnd > number
+            return {
+                index: match.index ?? 0,
+                number,
+                rangeEnd: hasRange ? rangeEnd : undefined,
+                label: hasRange ? `${number}-${rangeEnd}` : `${number}`,
+            }
+        })
         .filter((marker) => Number.isFinite(marker.number))
 
     const englishExamMarkers = rawMarkers.filter(
-        (marker) => marker.number >= 18 && marker.number <= 45,
+        (marker) =>
+            marker.number >= 18 &&
+            marker.number <= 45 &&
+            (marker.rangeEnd === undefined || marker.rangeEnd <= 45),
     )
     const broadMarkers =
         englishExamMarkers.length >= 2 ? englishExamMarkers : rawMarkers
-    const activeMarkers = broadMarkers.filter((marker, idx) => {
-        const nextIndex = broadMarkers[idx + 1]?.index ?? markdown.length
+    const groupedMarkers = collapseRangeChildMarkers(broadMarkers)
+    const activeMarkers = groupedMarkers.filter((marker, idx) => {
+        const nextIndex = groupedMarkers[idx + 1]?.index ?? markdown.length
         return isLikelyQuestionSegment(
             markdown.slice(marker.index, nextIndex),
             options,
@@ -98,17 +138,18 @@ function questionSections(
         const questionType = inferQuestionType(text)
         return {
             questionNumber: marker.number,
+            questionLabel: marker.label,
             questionType,
-            title: `Q${marker.number} · ${questionType}`,
+            title: `Q${marker.label} · ${questionType}`,
             text,
         }
     })
 
-    const byNumber = new Map<number, (typeof sections)[number]>()
+    const byNumber = new Map<string, (typeof sections)[number]>()
     for (const section of sections) {
-        const previous = byNumber.get(section.questionNumber)
+        const previous = byNumber.get(section.questionLabel)
         if (!previous || section.text.length > previous.text.length) {
-            byNumber.set(section.questionNumber, section)
+            byNumber.set(section.questionLabel, section)
         }
     }
 
@@ -265,13 +306,14 @@ export function splitPdfMarkdownIntoSections(
                 )
             }
             return {
-                id: `${idPrefix}-q${question.questionNumber}`,
+                id: `${idPrefix}-q${question.questionLabel}`,
                 sourceName,
                 title: question.title,
                 markdown: markdownForDiagram,
                 sectionIndex: index + 1,
                 charCount: markdownForDiagram.length,
                 questionNumber: question.questionNumber,
+                questionLabel: question.questionLabel,
                 questionType: question.questionType,
             }
         })

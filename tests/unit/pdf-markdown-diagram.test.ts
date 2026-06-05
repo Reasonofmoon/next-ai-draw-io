@@ -70,6 +70,59 @@ describe("splitPdfMarkdownIntoSections", () => {
         ).toBe(true)
     })
 
+    it("keeps late CSAT shared-passage ranges as grouped sections", () => {
+        const longPassage = (topic: string) =>
+            [
+                `${topic} begins with a situation, develops a contrast, explains the cause, and reaches a conclusion that students can trace as one coherent passage.`,
+                "The repeated examples are long enough to resemble a converted exam passage rather than a short answer key or page number.",
+            ].join(" ")
+        const markdown = [
+            "38. 글의 흐름으로 보아, 주어진 문장이 들어가기에 가장 적절한 곳은?",
+            longPassage("The sentence insertion item"),
+            "",
+            "39. 다음 글에서 전체 흐름과 관계 없는 문장은?",
+            longPassage("The unrelated sentence item"),
+            "",
+            "40 다음 글의 내용을 한 문장으로 요약하고자 한다.",
+            longPassage("The summary item"),
+            "",
+            "41-42 다음 글을 읽고, 물음에 답하시오.",
+            longPassage(
+                "The shared passage for questions forty one and forty two",
+            ),
+            "",
+            "42. 윗글의 제목으로 가장 적절한 것은?",
+            "① short option",
+            "",
+            "43~45 다음 글을 읽고, 물음에 답하시오.",
+            longPassage(
+                "The shared passage for questions forty three through forty five",
+            ),
+            "",
+            "44. 윗글의 빈칸에 들어갈 말로 가장 적절한 것은?",
+            "① short option",
+            "",
+            "45. 윗글의 내용과 일치하지 않는 것은?",
+            "① short option",
+        ].join("\n")
+
+        const result = splitPdfMarkdownIntoSections(markdown, "late.pdf")
+
+        expect(result.sections.map((section) => section.title)).toEqual([
+            "Q38 · 문장 위치",
+            "Q39 · 무관한 문장",
+            "Q40 · 요약",
+            "Q41-42 · 제목",
+            "Q43-45 · 빈칸 추론",
+        ])
+        expect(result.sections.map((section) => section.questionLabel)).toEqual(
+            ["38", "39", "40", "41-42", "43-45"],
+        )
+        expect(
+            result.sections.every((section) => section.charCount < 900),
+        ).toBe(true)
+    })
+
     it("splits Markdown by headings when available", () => {
         const markdown = [
             "# First Claim",
